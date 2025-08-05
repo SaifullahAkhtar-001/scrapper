@@ -1,8 +1,10 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
-from config.supabase_client import supabase_client
-from scrapers import scraper_manager
 from routes.keyword_routes import keyword_bp
+from services.health_service import HealthService
+from services.database_service import DatabaseService
+from services.scraper_service import ScraperService
+from services.todocoleccion_service import TodocoleccionService
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -16,133 +18,67 @@ app.register_blueprint(keyword_bp)
 # Basic route for testing
 @app.route('/')
 def home():
-    return jsonify({
-        'message': 'Flask app is running successfully!',
-        'status': 'active'
-    })
+    return jsonify(HealthService.get_home_status())
 
 # Health check endpoint
 @app.route('/health')
 def health_check():
-    return jsonify({
-        'status': 'healthy',
-        'service': 'scrapper-backend'
-    })
+    return jsonify(HealthService.get_health_status())
 
 # Database connection test endpoint
 @app.route('/api/test-db')
 def test_database():
-    try:
-        # Test the connection by fetching keywords
-        keywords = supabase_client.get_all_keywords()
-        return jsonify({
-            'success': True,
-            'message': 'Database connection successful',
-            'keywords_count': len(keywords),
-            'sample_keywords': [kw['keyword'] for kw in keywords[:3]] if keywords else []
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e),
-            'message': 'Database connection failed'
-        }), 500
+    result = DatabaseService.test_connection()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
 
 # Test scraper system endpoint
 @app.route('/api/test-scrapers')
 def test_scrapers():
-    try:
-        # Get keywords
-        keywords = scraper_manager.get_keywords()
-        
-        # Check registered scrapers
-        registered_scrapers = [scraper.site_name for scraper in scraper_manager.scrapers]
-        
-        return jsonify({
-            'success': True,
-            'keywords_count': len(keywords),
-            'keywords': keywords,
-            'registered_scrapers': registered_scrapers,
-            'scrapers_count': len(registered_scrapers),
-            'message': 'Scraper system is ready' if registered_scrapers else 'No scrapers registered'
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    result = ScraperService.get_scraper_status()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
 
 # Test eBay scraper endpoint
 @app.route('/api/test-ebay-scraper')
 def test_ebay_scraper():
-    try:
-        # Get keywords
-        keywords = scraper_manager.get_keywords()
-        
-        if not keywords:
-            return jsonify({
-                'success': False,
-                'error': 'No keywords found in database. Please add some keywords first.'
-            }), 400
-        
-        # Run eBay scraper with first 2 keywords for testing
-        test_keywords = keywords[:2]
-        
-        print(f"Testing eBay scraper with keywords: {test_keywords}")
-        
-        # Get the eBay scraper
-        ebay_scraper = None
-        for scraper in scraper_manager.scrapers:
-            if scraper.site_name == 'ebay':
-                ebay_scraper = scraper
-                break
-        
-        if not ebay_scraper:
-            return jsonify({
-                'success': False,
-                'error': 'eBay scraper not found'
-            }), 500
-        
-        # Run the scraper
-        result = ebay_scraper.run(test_keywords)
-        
-        return jsonify({
-            'success': True,
-            'message': 'eBay scraper test completed',
-            'test_keywords': test_keywords,
-            'result': result
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    result = ScraperService.test_ebay_scraper()
+    status_code = 500 if not result.get('success', True) else 200
+    if not result.get('success') and 'No keywords found' in result.get('error', ''):
+        status_code = 400
+    return jsonify(result), status_code
 
 # Run all scrapers endpoint
 @app.route('/api/run-scrapers', methods=['POST'])
 def run_all_scrapers():
-    try:
-        # Run all registered scrapers
-        result = scraper_manager.run_all_scrapers()
-        
-        if 'error' in result:
-            return jsonify({
-                'success': False,
-                'error': result['error']
-            }), 500
-        
-        return jsonify({
-            'success': True,
-            'message': 'All scrapers completed',
-            'result': result
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    result = ScraperService.run_all_scrapers()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
+
+# Todocoleccion scraper routes
+@app.route('/api/test-todocoleccion-scraper')
+def test_todocoleccion_scraper():
+    result = TodocoleccionService.test_todocoleccion_scraper()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
+
+@app.route('/api/run-todocoleccion-scraper', methods=['POST'])
+def run_todocoleccion_scraper():
+    result = TodocoleccionService.run_todocoleccion_scraper()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
+
+@app.route('/api/todocoleccion-status')
+def todocoleccion_status():
+    result = TodocoleccionService.get_todocoleccion_status()
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
+
+@app.route('/api/scrape-todocoleccion/<keyword>')
+def scrape_todocoleccion_keyword(keyword):
+    result = TodocoleccionService.scrape_specific_keyword(keyword)
+    status_code = 500 if not result.get('success', True) else 200
+    return jsonify(result), status_code
 
 if __name__ == '__main__':
     # Run the app in debug mode for development

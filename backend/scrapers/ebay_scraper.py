@@ -91,12 +91,12 @@ class EbayScraper(BaseScraper):
             # Extract description
             description = self._extract_description(element)
             
-            # Create listing data
+            # Create listing data - match database schema
             listing_data = {
                 'title': self.clean_title(title),
                 'price': price,
                 'url': url,
-                'images': images,
+                'image_url': images[0] if images else None,  # Take first image as image_url
                 'description': description,
                 'site': self.site_name,
                 'keyword': keyword,

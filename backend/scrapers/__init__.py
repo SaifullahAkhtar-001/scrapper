@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from .base_scraper import BaseScraper
 from .ebay_scraper import EbayScraper
+from .todocoleccion_scraper import TodocoleccionScraper
 import time
 
 class ScraperManager:
@@ -95,4 +96,8 @@ scraper_manager = ScraperManager()
 
 # Register the eBay scraper
 ebay_scraper = EbayScraper()
-scraper_manager.add_scraper(ebay_scraper) 
+scraper_manager.add_scraper(ebay_scraper)
+
+# Register the Todocoleccion scraper
+todocoleccion_scraper = TodocoleccionScraper()
+scraper_manager.add_scraper(todocoleccion_scraper) 
