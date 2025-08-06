@@ -22,7 +22,12 @@ class ScraperManager:
         from config.supabase_client import supabase_client
         keywords_data = supabase_client.get_all_keywords()
         return [kw['keyword'] for kw in keywords_data]
-    
+
+    def get_spanish_keywords(self) -> List[str]:
+        """Get all active keywords from database"""
+        from config.supabase_client import supabase_client
+        keywords_data = supabase_client.get_all_spanish_keywords()
+        return [kw['spanishkeyword'] for kw in keywords_data]   
     def run_all_scrapers(self) -> Dict[str, Any]:
         """Run all registered scrapers sequentially"""
         if not self.scrapers:

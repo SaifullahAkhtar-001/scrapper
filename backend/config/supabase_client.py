@@ -23,6 +23,14 @@ class SupabaseClient:
         except Exception as e:
             print(f"Error fetching keywords: {e}")
             return []
+    def get_all_spanish_keywords(self):
+        """Fetch all active keywords from the database"""
+        try:
+            response = self.client.table('keywords').select('spanishkeyword').eq('is_active', True).execute()
+            return response.data
+        except Exception as e:
+            print(f"Error fetching keywords: {e}")
+            return []
     
     def save_listing(self, listing_data):
         """Save a scraped listing to the database"""

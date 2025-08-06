@@ -3,7 +3,7 @@ import random
 import requests
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
-from fake_useragent import UserAgent
+# Removed fake_useragent import to avoid suspicious user agents
 from config.supabase_client import supabase_client
 
 class BaseScraper(ABC):
@@ -17,19 +17,24 @@ class BaseScraper(ABC):
     
     def __init__(self, site_name: str):
         self.site_name = site_name
-        self.ua = UserAgent()
         self.session = requests.Session()
         self.setup_session()
         
     def setup_session(self):
         """Setup session with headers and retry strategy"""
         self.session.headers.update({
-            'User-Agent': self.ua.random,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
         })
     
     def get_random_delay(self, min_delay: float = 2.0, max_delay: float = 5.0) -> float:
@@ -43,8 +48,8 @@ class BaseScraper(ABC):
                 # Add random delay
                 time.sleep(self.get_random_delay())
                 
-                # Update user agent for each request
-                self.session.headers['User-Agent'] = self.ua.random
+                # Keep consistent user agent to avoid detection
+                pass
                 
                 response = self.session.get(url, timeout=30)
                 response.raise_for_status()

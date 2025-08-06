@@ -15,35 +15,10 @@ class TodocoleccionScraper(BaseScraper):
     def __init__(self):
         super().__init__("todocoleccion")
         self.base_url = "https://www.todocoleccion.net"
-        # Create directory for saving soup content
-        self.soup_output_dir = "soup_content"
-        os.makedirs(self.soup_output_dir, exist_ok=True)
         
-    def save_soup_content(self, content: str, filename: str, content_type: str = "page") -> str:
-        """Save soup content to a file"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-            filepath = os.path.join(self.soup_output_dir, f"{timestamp}_{safe_filename}_{content_type}.html")
-            
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(content)
-            
-            print(f"Saved {content_type} content to: {filepath}")
-            return filepath
-        except Exception as e:
-            print(f"Error saving soup content: {e}")
-            return ""
+
     
-    def save_listing_soup_content(self, element, listing_id: str, keyword: str) -> str:
-        """Save individual listing soup content"""
-        try:
-            soup_content = str(element)
-            filename = f"listing_{listing_id}_{keyword}"
-            return self.save_soup_content(soup_content, filename, "listing")
-        except Exception as e:
-            print(f"Error saving listing soup content: {e}")
-            return ""
+
     
     def build_search_url(self, keyword: str, page: int = 1) -> str:
         """Build Todocoleccion search URL with pagination"""
@@ -59,10 +34,6 @@ class TodocoleccionScraper(BaseScraper):
         listings = []
         
         try:
-            # Save the full page content
-            page_filename = f"page_{keyword}"
-            self.save_soup_content(html_content, page_filename, "full_page")
-            
             soup = BeautifulSoup(html_content, 'html.parser')
             
             # First, try to find the main search results container
@@ -73,11 +44,11 @@ class TodocoleccionScraper(BaseScraper):
             else:
                 print("Found main search container")
             
-            # print('search_containersearch_containersearch_containersearch_container',search_container)
+
 
             # Then look for the items list container within the search container
             items_container = search_container.find('div', class_='card-lotes-in-gallery')
-            print('items_containeritems_containeritems_containeritems_container',items_container)
+
             if not items_container:
                 # Fallback to any _lote_items container
                 items_container = search_container.find('div', class_=lambda x: x and '_lote_items' in x)
@@ -111,9 +82,6 @@ class TodocoleccionScraper(BaseScraper):
                     # Extract data-id-lote for debugging
                     lote_id = element.get('data-id-lote', 'unknown')
                     print(f"Processing listing {i+1}/{len(listing_elements)} (ID: {lote_id})")
-                    
-                    # Save individual listing soup content
-                    self.save_listing_soup_content(element, lote_id, keyword)
                     
                     listing = self._extract_single_listing(element, keyword)
                     if listing:
@@ -379,13 +347,9 @@ class TodocoleccionScraper(BaseScraper):
         
         return "Venta directa"  # Direct sale as default
     
-    def scrape_keyword(self, keyword: str, max_pages: int = 20) -> Dict[str, Any]:
+    def scrape_keyword(self, keyword: str) -> Dict[str, Any]:
         """Enhanced scraping with better error handling and pagination detection"""
         print(f"Starting to scrape '{keyword}' on {self.site_name}")
-        
-        # Save scraping session info
-        session_info = f"Scraping session for keyword: {keyword}\nStarted at: {datetime.now()}\nMax pages: {max_pages}\n"
-        self.save_soup_content(session_info, f"session_{keyword}", "session_info")
         
         total_listings = 0
         saved_listings = 0
@@ -394,7 +358,7 @@ class TodocoleccionScraper(BaseScraper):
         consecutive_empty_pages = 0
         max_consecutive_empty = 3  # Stop after 3 consecutive empty pages
         
-        while page <= max_pages and consecutive_empty_pages < max_consecutive_empty:
+        while consecutive_empty_pages < max_consecutive_empty:
             try:
                 # Build search URL
                 search_url = self.build_search_url(keyword, page)
@@ -409,8 +373,11 @@ class TodocoleccionScraper(BaseScraper):
                     page += 1
                     continue
                 
-                # Check for 404 or error pages
-                if response.status_code == 404:
+                # Check for 403 or error pages that indicate we should stop
+                if response.status_code == 403:
+                    print(f"Page {page} returned 403 - stopping scraping")
+                    break
+                elif response.status_code == 404:
                     print(f"Page {page} returned 404 - reached end of results")
                     break
                 
@@ -461,16 +428,12 @@ class TodocoleccionScraper(BaseScraper):
                     print("Too many errors, stopping scrape")
                     break
         
-        # Save final session summary
-        final_summary = f"""
-Scraping session completed for keyword: {keyword}
-Ended at: {datetime.now()}
-Total listings found: {total_listings}
-Saved listings: {saved_listings}
-Errors: {errors}
-Pages scraped: {page - 1}
-        """
-        self.save_soup_content(final_summary, f"session_{keyword}", "final_summary")
+        print(f"\nScraping session completed for keyword: {keyword}")
+        print(f"Ended at: {datetime.now()}")
+        print(f"Total listings found: {total_listings}")
+        print(f"Saved listings: {saved_listings}")
+        print(f"Errors: {errors}")
+        print(f"Pages scraped: {page - 1}")
         
         return {
             'keyword': keyword,
