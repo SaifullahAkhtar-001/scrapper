@@ -418,6 +418,131 @@ class TodocoleccionService:
                 'error': str(e)
             }
 
+    @staticmethod
+    def push_cigar_listings_from_scraped():
+        """
+        Filter listings from 'scraped_listings' by keywords and stopwords in Python, and sync 'cigar_listings' to match the filter.
+        - Remove any listing from cigar_listings that does not match the filter.
+        - Insert new filtered listings not already present.
+        - Fetch keywords and stopwords from the DB (both English and Spanish fields, active only).
+        """
+        from config.supabase_client import supabase_client
+        from services.keyword_service import KeywordService
+        from services.stopword_service import StopwordService
+
+        # Fetch active keywords (both English and Spanish)
+        try:
+            db_keywords = KeywordService.get_all_keywords()
+            keywords = set()
+            for k in db_keywords:
+                if k.get('keyword'):
+                    keywords.add(k['keyword'].strip().upper())
+                if k.get('spanishkeyword'):
+                    keywords.add(k['spanishkeyword'].strip().upper())
+            keywords = [kw for kw in keywords if kw]
+        except Exception as e:
+            print(f"Error fetching keywords: {e}")
+            return {'success': False, 'error': f'Error fetching keywords: {e}'}
+
+        # Fetch active stopwords (both English and Spanish)
+        try:
+            db_stopwords = StopwordService.get_all_stopwords()
+            stop_words = set()
+            for sw in db_stopwords:
+                if sw.get('stopword'):
+                    stop_words.add(sw['stopword'].strip().upper())
+                if sw.get('spanishkeyword'):
+                    stop_words.add(sw['spanishkeyword'].strip().upper())
+            stop_words = [sw for sw in stop_words if sw]
+        except Exception as e:
+            print(f"Error fetching stopwords: {e}")
+            return {'success': False, 'error': f'Error fetching stopwords: {e}'}
+
+        # Fetch all listings from scraped_listings
+        try:
+            response = supabase_client.client.table('scraped_listings').select('*').execute()
+            listings = response.data
+        except Exception as e:
+            print(f"Error fetching scraped_listings: {e}")
+            return {'success': False, 'error': str(e)}
+
+        if not listings:
+            print("No listings found in scraped_listings.")
+            return {'success': False, 'error': 'No listings found in scraped_listings.'}
+
+        filtered = []
+        filtered_urls = set()
+        for listing in listings:
+            title = (listing.get('title') or '').upper()
+            url = (listing.get('url') or '').upper()
+            # Must match at least one keyword in title or url
+            if not any(kw in title or kw in url for kw in keywords):
+                continue
+            # Exclude if any stopword is present in title or url
+            if any(sw in title or sw in url for sw in stop_words):
+                continue
+            filtered.append(listing)
+            if 'url' in listing:
+                filtered_urls.add(listing['url'])
+
+        print(f"Filtered {len(filtered)} listings to sync with cigar_listings.")
+        if not filtered:
+            # If nothing matches, clear the cigar_listings table
+            try:
+                del_resp = supabase_client.client.table('cigar_listings').delete().neq('id', 0).execute()
+                print(f"Deleted all listings from cigar_listings (no matches after filtering).")
+            except Exception as e:
+                print(f"Error clearing cigar_listings: {e}")
+            return {'success': True, 'message': 'No listings matched filter. cigar_listings cleared.'}
+
+        # Fetch all URLs from cigar_listings
+        try:
+            cigar_resp = supabase_client.client.table('cigar_listings').select('id,url').execute()
+            cigar_data = cigar_resp.data
+            existing_urls = set(item['url'] for item in cigar_data if 'url' in item)
+            id_url_map = {item['url']: item['id'] for item in cigar_data if 'url' in item and 'id' in item}
+        except Exception as e:
+            print(f"Error fetching cigar_listings URLs: {e}")
+            return {'success': False, 'error': str(e)}
+
+        # Delete from cigar_listings any listing whose URL is not in filtered_urls
+        urls_to_remove = existing_urls - filtered_urls
+        deleted_count = 0
+        if urls_to_remove:
+            try:
+                for url in urls_to_remove:
+                    # Delete by id for safety
+                    del_id = id_url_map.get(url)
+                    if del_id:
+                        supabase_client.client.table('cigar_listings').delete().eq('id', del_id).execute()
+                        deleted_count += 1
+                print(f"Deleted {deleted_count} listings from cigar_listings (no longer matching filter).")
+            except Exception as e:
+                print(f"Error deleting from cigar_listings: {e}")
+                return {'success': False, 'error': str(e)}
+
+        # Only keep listings whose URL is not already in cigar_listings
+        to_insert = [l for l in filtered if l.get('url') not in existing_urls]
+
+        print(f"{len(to_insert)} new listings to insert into cigar_listings (after duplicate check).")
+        if to_insert:
+            try:
+                # Remove 'id' if present, let DB assign new id
+                for l in to_insert:
+                    l.pop('id', None)
+                insert_resp = supabase_client.client.table('cigar_listings').upsert(to_insert).execute()
+                print(f"Inserted {len(insert_resp.data)} listings into cigar_listings.")
+            except Exception as e:
+                print(f"Error inserting into cigar_listings: {e}")
+                return {'success': False, 'error': str(e)}
+
+        return {
+            'success': True,
+            'inserted': len(to_insert),
+            'deleted': deleted_count,
+            'message': f'Synced cigar_listings to match current filter.'
+        }
+
     # Keep existing test functions for debugging...
     @staticmethod
     def test_todocoleccion_scraper() -> Dict[str, Any]:

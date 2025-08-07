@@ -25,10 +25,22 @@ const Navbar = () => {
             <BookOpen className="w-4 h-4" /> Keywords
           </Link>
           <Link
+            to="/stopwords"
+            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/stopwords') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
+          >
+            <Database className="w-4 h-4" /> Stopwords
+          </Link>
+          <Link
             to="/data"
             className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/data') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
           >
-            <Database className="w-4 h-4" /> Data
+            <Database className="w-4 h-4" /> All Data
+          </Link>
+          <Link
+            to="/cigarsdata"
+            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/cigarsdata') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
+          >
+            <Database className="w-4 h-4" /> Cigars Data
           </Link>
         </div>
       </div>
