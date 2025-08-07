@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from .base_scraper import BaseScraper
 from .ebay_scraper import EbayScraper
 from .todocoleccion_scraper import TodocoleccionScraper
+from .craigslist_scraper import CraigslistScraper
 import time
 
 class ScraperManager:
@@ -105,4 +106,8 @@ scraper_manager.add_scraper(ebay_scraper)
 
 # Register the Todocoleccion scraper
 todocoleccion_scraper = TodocoleccionScraper()
-scraper_manager.add_scraper(todocoleccion_scraper) 
+scraper_manager.add_scraper(todocoleccion_scraper)
+
+# Register the Craigslist scraper
+craigslist_scraper = CraigslistScraper()
+scraper_manager.add_scraper(craigslist_scraper) 
