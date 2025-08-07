@@ -214,6 +214,34 @@ class AmazonScraper(BaseScraper):
         pass
 ```
 
+## Craigslist Scraper - Selenium Requirements
+
+To scrape Craigslist (searchcraigslist.net) results, you must use Selenium to render JavaScript-loaded content.
+
+### Install Selenium
+
+```
+pip install selenium
+```
+
+### Install Google Chrome
+- Download and install Google Chrome: https://www.google.com/chrome/
+
+### Install ChromeDriver
+- Download ChromeDriver matching your Chrome version: https://sites.google.com/chromium.org/driver/
+- Add the ChromeDriver executable to your system PATH, or specify its path in the code:
+  ```python
+  driver = webdriver.Chrome(executable_path='path/to/chromedriver', options=chrome_options)
+  ```
+
+### Windows Troubleshooting
+- If you get errors about ChromeDriver not found, ensure the folder containing chromedriver.exe is in your PATH.
+- You can check your Chrome version by navigating to chrome://settings/help in your browser.
+
+### Notes
+- The scraper will not work in headless server environments without Chrome and ChromeDriver.
+- If you want to use Firefox, install geckodriver and change the Selenium code accordingly.
+
 ## Error Handling
 
 The system includes comprehensive error handling:
