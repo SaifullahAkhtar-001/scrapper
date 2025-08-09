@@ -323,6 +323,36 @@ class TodocoleccionService:
             }
 
     @staticmethod
+    def scrape_specific_keyword(keyword: str) -> Dict[str, Any]:
+        """
+        Scrape Todocoleccion for a single keyword using full pagination.
+        """
+        try:
+            # Locate the Todocoleccion scraper instance
+            todocoleccion_scraper = None
+            for scraper in scraper_manager.scrapers:
+                if scraper.site_name == 'todocoleccion':
+                    todocoleccion_scraper = scraper
+                    break
+
+            if not todocoleccion_scraper:
+                return {
+                    'success': False,
+                    'error': 'Todocoleccion scraper not found in scraper manager'
+                }
+
+            # Run pagination scraping for the provided keyword
+            result = TodocoleccionService.scrape_keyword_with_pagination(
+                todocoleccion_scraper, keyword
+            )
+            return result
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    @staticmethod
     def get_keyword_page_count(keyword: str) -> int:
         """
         Get the estimated number of pages for a keyword by checking the first page.

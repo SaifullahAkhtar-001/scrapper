@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Home, Database } from 'lucide-react';
+import { BookOpen, Home, Database, Play } from 'lucide-react';
 
 const Navbar = () => {
   const location = useLocation();
@@ -41,6 +41,12 @@ const Navbar = () => {
             className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/cigarsdata') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
           >
             <Database className="w-4 h-4" /> Cigars Data
+          </Link>
+          <Link
+            to="/scrape"
+            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/scrape') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
+          >
+            <Play className="w-4 h-4" /> Run Scrapers
           </Link>
         </div>
       </div>

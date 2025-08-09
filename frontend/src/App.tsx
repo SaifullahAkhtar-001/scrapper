@@ -5,6 +5,7 @@ import KeywordsPage from './pages/KeywordsPage';
 import DataPage from './pages/DataPage';
 import CigarsData from './pages/CigarsData';
 import StopwordsPage from './pages/StopwordsPage';
+import ScrapeRunnerPage from './pages/ScrapeRunnerPage';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/data" element={<DataPage />} />
         <Route path="/cigarsdata" element={<CigarsData />} />
         <Route path="/stopwords" element={<StopwordsPage />} />
+        <Route path="/scrape" element={<ScrapeRunnerPage />} />
       </Routes>
     </Router>
   );

@@ -203,6 +203,39 @@ class CraigslistService:
                 'total_runtime': total_runtime
             }
 
+    @staticmethod
+    def scrape_specific_keyword(keyword: str) -> Dict[str, Any]:
+        """
+        Scrape Craigslist for a single keyword with a reasonable page limit.
+        """
+        try:
+            # Find the craigslist scraper instance
+            craigslist_scraper = None
+            for scraper in scraper_manager.scrapers:
+                if scraper.site_name == 'craigslist':
+                    craigslist_scraper = scraper
+                    break
+
+            if not craigslist_scraper:
+                return {
+                    'success': False,
+                    'error': 'Craigslist scraper not found in scraper manager'
+                }
+
+            # Use a small max_pages to avoid long blocking calls
+            result = craigslist_scraper.scrape_keyword(keyword, max_pages=2)
+
+            return {
+                'success': True,
+                'site': 'craigslist',
+                **result
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
 if __name__ == "__main__":
     result = CraigslistService.run_complete_scraping()
     print("\nCraigslist Scraper Run Result:")

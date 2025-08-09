@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Save, X, Check, AlertCircle, RefreshCw, UploadCloud } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Save, X, Check, AlertCircle, RefreshCw, UploadCloud, Globe } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
 
 export interface Stopword {
@@ -8,11 +8,13 @@ export interface Stopword {
   is_active: boolean | null;
   created_at: string | null;
   updated_at: string | null;
+  spanishkeyword: string | null;
 }
 
 const emptyStopword: Omit<Stopword, 'id' | 'created_at' | 'updated_at'> = {
   stopword: '',
   is_active: true,
+  spanishkeyword: '',
 };
 
 const StopwordsPage = () => {
@@ -59,10 +61,11 @@ const StopwordsPage = () => {
     fetchStopwords();
   }, []);
 
-  // Filter stopwords based on search
-  const filteredStopwords = stopwords.filter(s => 
-    s.stopword.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+// Filter stopwords based on search
+const filteredStopwords = stopwords.filter(s => 
+  s.stopword.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  (s.spanishkeyword || '').toLowerCase().includes(searchQuery.toLowerCase())
+);
 
   // Add stopword
   const handleAdd = async (e: React.MouseEvent) => {
@@ -108,6 +111,7 @@ const StopwordsPage = () => {
     setEditStopword({
       stopword: stopword.stopword,
       is_active: stopword.is_active,
+      spanishkeyword: stopword.spanishkeyword,
     });
   };
 
@@ -230,22 +234,34 @@ const StopwordsPage = () => {
         {showAddForm && (
           <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6 mb-8">
             <h3 className="text-xl font-semibold text-slate-800 mb-4">Add New Stopword</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Stopword *
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    value={newStopword.stopword}
-                    onChange={e => setNewStopword({ ...newStopword, stopword: e.target.value })}
-                    placeholder="Enter stopword..."
-                    required
-                  />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      English Stopword *
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      value={newStopword.stopword}
+                      onChange={e => setNewStopword({ ...newStopword, stopword: e.target.value })}
+                      placeholder="Enter stopword..."
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      Spanish Translation
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                      value={newStopword.spanishkeyword || ''}
+                      onChange={e => setNewStopword({ ...newStopword, spanishkeyword: e.target.value })}
+                      placeholder="Enter Spanish translation..."
+                    />
+                  </div>
                 </div>
-              </div>
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
                   <input
@@ -305,7 +321,7 @@ const StopwordsPage = () => {
                   {editingId === stopword.id ? (
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-2">Stopword</label>
+                        <label className="block text-xs font-medium text-slate-600 mb-2">English</label>
                         <input
                           type="text"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
@@ -314,7 +330,16 @@ const StopwordsPage = () => {
                           required
                         />
                       </div>
-                      <div className="flex items-center justify-between">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-2">Spanish</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
+                          value={editStopword.spanishkeyword || ''}
+                          onChange={e => setEditStopword({ ...editStopword, spanishkeyword: e.target.value })}
+                        />
+                      </div>
+                  <div className="flex items-center justify-between">
                         <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
                           <input
                             type="checkbox"
@@ -344,7 +369,13 @@ const StopwordsPage = () => {
                     <>
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-slate-800 text-lg leading-tight">{stopword.stopword}</h3>
+                      <h3 className="font-semibold text-slate-800 text-lg leading-tight">{stopword.stopword}</h3>
+                      {stopword.spanishkeyword && (
+                        <p className="text-slate-600 text-sm mt-1 flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          {stopword.spanishkeyword}
+                        </p>
+                      )}
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           stopword.is_active 

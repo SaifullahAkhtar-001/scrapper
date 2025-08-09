@@ -1,10 +1,11 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from routes.keyword_routes import keyword_bp
 from services.health_service import HealthService
 from services.database_service import DatabaseService
 from services.scraper_service import ScraperService
 from services.todocoleccion_service import TodocoleccionService
+from services.craigslist_service import CraigslistService
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -85,6 +86,50 @@ def push_cigar_listings():
     result = TodocoleccionService.push_cigar_listings_from_scraped()
     status_code = 200 if result.get('success', False) else 500
     return jsonify(result), status_code
+
+# Single endpoint to run scrapers for a specific keyword
+@app.route('/api/scrape', methods=['POST'])
+def scrape_by_keyword():
+    """
+    Run supported scrapers for a single keyword.
+    Payload formats supported:
+    - JSON body: { "keyword": "<value>" }
+    - Or query param: /api/scrape?keyword=<value>
+    """
+    keyword = None
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+        keyword = body.get('keyword')
+    if not keyword:
+        keyword = request.args.get('keyword')
+
+    if not keyword or not str(keyword).strip():
+        return jsonify({
+            'success': False,
+            'error': 'Missing required "keyword"'
+        }), 400
+
+    keyword = str(keyword).strip()
+
+    # Run scrapers serially; could be parallelized later if needed
+    results = {}
+    try:
+        results['todocoleccion'] = TodocoleccionService.scrape_specific_keyword(keyword)
+    except Exception as e:
+        results['todocoleccion'] = { 'success': False, 'error': str(e) }
+
+    try:
+        results['craigslist'] = CraigslistService.scrape_specific_keyword(keyword)
+    except Exception as e:
+        results['craigslist'] = { 'success': False, 'error': str(e) }
+
+    overall_success = any(r.get('success') for r in results.values() if isinstance(r, dict))
+
+    return jsonify({
+        'success': overall_success,
+        'keyword': keyword,
+        'results': results
+    }), 200 if overall_success else 500
 
 if __name__ == '__main__':
     # Run the app in debug mode for development
