@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, ChevronDown, Image as ImageIcon, Tag, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, Image as ImageIcon, Copy, Check, ChevronLeft, ChevronRight, Save as SaveIcon, Trash2 } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
 
 export interface ScrapedListing {
@@ -31,11 +31,13 @@ const DataPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSite, setSelectedSite] = useState('all');
   const [selectedKeyword, setSelectedKeyword] = useState('all');
-  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [priceRange] = useState({ min: '', max: '' });
   const [sortBy, setSortBy] = useState('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [availableKeywords, setAvailableKeywords] = useState<Keyword[]>([]);
+  const [savingId, setSavingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,6 +111,28 @@ const DataPage = () => {
         setListings(data as ScrapedListing[]);
         setTotalCount(count || 0);
         setTotalPages(Math.ceil((count || 0) / pageSize));
+
+        // Pre-mark already saved listings
+        const currentListings = (data || []) as ScrapedListing[];
+        const urlsOnPage = Array.from(new Set(currentListings.map((l) => l.url).filter(Boolean)));
+        if (urlsOnPage.length > 0) {
+          const { data: savedRows, error: savedErr } = await supabase
+            .from('cigar_listings')
+            .select('url')
+            .in('url', urlsOnPage);
+          if (!savedErr) {
+            const savedUrlSet = new Set((savedRows || []).map((r: { url: string }) => r.url));
+            const ids = new Set(
+              currentListings.filter((l) => savedUrlSet.has(l.url)).map((l) => l.id)
+            );
+            setSavedIds(ids);
+          } else {
+            // If saved lookup fails, clear saved markers for safety
+            setSavedIds(new Set());
+          }
+        } else {
+          setSavedIds(new Set());
+        }
       }
     } catch (err) {
       setError('Failed to fetch listings');
@@ -136,6 +160,64 @@ const DataPage = () => {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setCurrentPage(1);
+  };
+
+  const highlightKeywordInTitle = (title: string, keyword: string) => {
+    if (!keyword) return title;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'ig');
+    const parts = title.split(regex);
+    return parts.map((part, idx) =>
+      part.toLowerCase() === keyword.toLowerCase() ? (
+        <mark key={idx} className="bg-yellow-200 rounded px-1">{part}</mark>
+      ) : (
+        <span key={idx}>{part}</span>
+      )
+    );
+  };
+
+  const handleSaveListing = async (listing: ScrapedListing) => {
+    try {
+      setSavingId(listing.id);
+      const { error } = await supabase.from('cigar_listings').insert([
+        {
+          title: listing.title,
+          url: listing.url,
+          price: listing.price,
+          image_url: listing.image_url,
+          description: listing.description,
+          site: listing.site,
+          keyword: listing.keyword,
+        },
+      ]);
+      if (error) {
+        // Treat unique violation (already saved) as success for UX
+        if ((error as any).code !== '23505') {
+          throw error;
+        }
+      }
+      setSavedIds((prev) => new Set(prev).add(listing.id));
+    } catch (e) {
+      console.error('Failed to save listing:', e);
+      setError('Failed to save listing');
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const handleDeleteListing = async (id: number) => {
+    try {
+      setDeletingId(id);
+      const { error } = await supabase.from('scraped_listings').delete().eq('id', id);
+      if (error) throw error;
+      setListings((prev) => prev.filter((l) => l.id !== id));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    } catch (e) {
+      console.error('Failed to delete listing:', e);
+      setError('Failed to delete listing');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   // Generate page numbers for pagination
@@ -295,8 +377,8 @@ const DataPage = () => {
 
                       {/* Content */}
                       <div className="p-4">
-                        <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2 line-clamp-2">
-                          {listing.title}
+                        <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
+                          {highlightKeywordInTitle(listing.title, listing.keyword)}
                         </h3>
                         <div className="mb-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
@@ -328,7 +410,7 @@ const DataPage = () => {
                           )}
                         </div>
 
-                        {/* Action Button */}
+                        {/* Action Buttons */}
                         <div className="flex items-center gap-2 mt-2">
                           <a
                             href={listing.url}
@@ -341,7 +423,41 @@ const DataPage = () => {
                             <ExternalLink className="w-3 h-3" />
                           </a>
                           <button
-                            className="ml-2 p-2 rounded-lg hover:bg-blue-50 transition-colors relative group/copy"
+                            className={`p-2 rounded-lg transition-colors relative group/save ${savedIds.has(listing.id) ? 'bg-green-50 text-green-700' : 'hover:bg-green-50 text-green-700'}`}
+                            onClick={() => handleSaveListing(listing)}
+                            disabled={savingId === listing.id || savedIds.has(listing.id)}
+                            type="button"
+                            aria-label="Save listing"
+                          >
+                            {savingId === listing.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : savedIds.has(listing.id) ? (
+                              <Check className="w-4 h-4" />
+                            ) : (
+                              <SaveIcon className="w-4 h-4" />
+                            )}
+                            <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity">
+                              {savedIds.has(listing.id) ? 'Saved' : 'Save'}
+                            </span>
+                          </button>
+                          <button
+                            className="p-2 rounded-lg transition-colors relative group/delete hover:bg-red-50 text-red-700"
+                            onClick={() => handleDeleteListing(listing.id)}
+                            disabled={deletingId === listing.id}
+                            type="button"
+                            aria-label="Delete listing"
+                          >
+                            {deletingId === listing.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                            <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/delete:opacity-100 pointer-events-none transition-opacity">
+                              Delete
+                            </span>
+                          </button>
+                          <button
+                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors relative group/copy"
                             onClick={async () => {
                               await navigator.clipboard.writeText(listing.url);
                               setCopiedId(listing.id);

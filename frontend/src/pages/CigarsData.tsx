@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, ChevronDown, Image as ImageIcon, Tag, Copy, Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, Image as ImageIcon, Copy, Check, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
 
 export interface ScrapedListing {
@@ -31,11 +31,11 @@ const DataPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSite, setSelectedSite] = useState('all');
   const [selectedKeyword, setSelectedKeyword] = useState('all');
-  const [priceRange, setPriceRange] = useState({ min: '', max: '' });
+  const [priceRange] = useState({ min: '', max: '' });
   const [sortBy, setSortBy] = useState('newest');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [availableKeywords, setAvailableKeywords] = useState<Keyword[]>([]);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -136,6 +136,35 @@ const DataPage = () => {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setCurrentPage(1);
+  };
+
+  const highlightKeywordInTitle = (title: string, keyword: string) => {
+    if (!keyword) return title;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escaped})`, 'ig');
+    const parts = title.split(regex);
+    return parts.map((part, idx) =>
+      part.toLowerCase() === keyword.toLowerCase() ? (
+        <mark key={idx} className="bg-yellow-200 rounded px-1">{part}</mark>
+      ) : (
+        <span key={idx}>{part}</span>
+      )
+    );
+  };
+
+  const handleUnsaveListing = async (id: number) => {
+    try {
+      setDeletingId(id);
+      const { error } = await supabase.from('cigar_listings').delete().eq('id', id);
+      if (error) throw error;
+      setListings((prev) => prev.filter((l) => l.id !== id));
+      setTotalCount((prev) => Math.max(0, prev - 1));
+    } catch (e) {
+      console.error('Failed to unsave listing:', e);
+      setError('Failed to unsave listing');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   // Generate page numbers for pagination
@@ -295,8 +324,8 @@ const DataPage = () => {
 
                       {/* Content */}
                       <div className="p-4">
-                        <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2 line-clamp-2">
-                          {listing.title}
+                        <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
+                          {highlightKeywordInTitle(listing.title, listing.keyword)}
                         </h3>
                         <div className="mb-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
@@ -328,7 +357,7 @@ const DataPage = () => {
                           )}
                         </div>
 
-                        {/* Action Button */}
+                        {/* Action Buttons */}
                         <div className="flex items-center gap-2 mt-2">
                           <a
                             href={listing.url}
@@ -341,7 +370,23 @@ const DataPage = () => {
                             <ExternalLink className="w-3 h-3" />
                           </a>
                           <button
-                            className="ml-2 p-2 rounded-lg hover:bg-blue-50 transition-colors relative group/copy"
+                            className="p-2 rounded-lg transition-colors relative group/unsave hover:bg-red-50 text-red-700"
+                            onClick={() => handleUnsaveListing(listing.id)}
+                            disabled={deletingId === listing.id}
+                            type="button"
+                            aria-label="Unsave listing"
+                          >
+                            {deletingId === listing.id ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                            <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/unsave:opacity-100 pointer-events-none transition-opacity">
+                              Unsave
+                            </span>
+                          </button>
+                          <button
+                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors relative group/copy"
                             onClick={async () => {
                               await navigator.clipboard.writeText(listing.url);
                               setCopiedId(listing.id);
