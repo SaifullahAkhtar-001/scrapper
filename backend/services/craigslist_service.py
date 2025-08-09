@@ -60,6 +60,10 @@ class CraigslistService:
             print(f"Keywords: {', '.join(keywords)}")
             print("-" * 80)
             
+            # Initialize URL cache for optimal performance
+            print("Initializing URL cache for duplicate checking...")
+            craigslist_scraper.initialize_url_cache()
+            
             # Initialize tracking variables
             total_results = {
                 'keywords_processed': 0,

@@ -65,8 +65,10 @@ const DataPage = () => {
   };
 
   const fetchListings = async () => {
+    console.log('Starting to fetch listings...');
     setLoading(true);
     setError(null);
+    
     try {
       // Build query
       let query = supabase.from('scraped_listings').select('*', { count: 'exact' });
@@ -104,38 +106,20 @@ const DataPage = () => {
       const to = from + pageSize - 1;
       query = query.range(from, to);
       
+      console.log('Executing Supabase query...');
       const { data, error, count } = await query;
+      console.log('Supabase query completed. Data:', data, 'Error:', error, 'Count:', count);
       
-      if (error) setError(error.message);
-      else {
+      if (error) {
+        console.error('Error from Supabase:', error);
+        setError(error.message);
+      } else {
         setListings(data as ScrapedListing[]);
         setTotalCount(count || 0);
         setTotalPages(Math.ceil((count || 0) / pageSize));
-
-        // Pre-mark already saved listings
-        const currentListings = (data || []) as ScrapedListing[];
-        const urlsOnPage = Array.from(new Set(currentListings.map((l) => l.url).filter(Boolean)));
-        if (urlsOnPage.length > 0) {
-          const { data: savedRows, error: savedErr } = await supabase
-            .from('cigar_listings')
-            .select('url')
-            .in('url', urlsOnPage);
-          if (!savedErr) {
-            const savedUrlSet = new Set((savedRows || []).map((r: { url: string }) => r.url));
-            const ids = new Set(
-              currentListings.filter((l) => savedUrlSet.has(l.url)).map((l) => l.id)
-            );
-            setSavedIds(ids);
-          } else {
-            // If saved lookup fails, clear saved markers for safety
-            setSavedIds(new Set());
-          }
-        } else {
-          setSavedIds(new Set());
-        }
       }
     } catch (err) {
-      setError('Failed to fetch listings');
+      console.error('Failed to fetch listings:', err);
     }
     setLoading(false);
   };
@@ -145,6 +129,9 @@ const DataPage = () => {
   }, []);
 
   useEffect(() => {
+    console.log('useEffect triggered with dependencies:', {
+      currentPage, pageSize, searchQuery, selectedSite, selectedKeyword, priceRange, sortBy
+    });
     fetchListings();
   }, [currentPage, pageSize, searchQuery, selectedSite, selectedKeyword, priceRange, sortBy]);
 
@@ -293,6 +280,7 @@ const DataPage = () => {
             >
               <option value="all">All Sites</option>
               <option value="ebay">eBay</option>
+              <option value="craigslist">Craigslist</option>
               <option value="todocoleccion">TodoColeccion</option>
             </select>
             <select

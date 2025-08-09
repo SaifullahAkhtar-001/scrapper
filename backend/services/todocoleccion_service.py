@@ -53,6 +53,10 @@ class TodocoleccionService:
             print(f"Found {len(keywords)} keywords to process")
             print(f"Keywords: {', '.join(keywords)}")
             print("-" * 80)
+            
+            # Initialize URL cache for optimal performance
+            print("Initializing URL cache for duplicate checking...")
+            todocoleccion_scraper.initialize_url_cache()
 
             # Initialize tracking variables
             total_results = {

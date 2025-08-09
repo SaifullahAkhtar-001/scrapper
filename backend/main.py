@@ -92,44 +92,78 @@ def push_cigar_listings():
 def scrape_by_keyword():
     """
     Run supported scrapers for a single keyword.
-    Payload formats supported:
-    - JSON body: { "keyword": "<value>" }
-    - Or query param: /api/scrape?keyword=<value>
+    Payload format (JSON body):
+    {
+        "keyword": "<value>",
+        "sites": ["todocoleccion", "craigslist", "ebay"]  # Optional, defaults to all
+    }
     """
-    keyword = None
-    if request.is_json:
-        body = request.get_json(silent=True) or {}
-        keyword = body.get('keyword')
-    if not keyword:
-        keyword = request.args.get('keyword')
-
-    if not keyword or not str(keyword).strip():
+    try:
+        if not request.is_json:
+            return jsonify({"success": False, "error": "Request must be JSON"}), 400
+            
+        data = request.get_json()
+        keyword = data.get('keyword')
+        sites = data.get('sites', ['todocoleccion', 'craigslist', 'ebay'])
+        
+        if not keyword:
+            return jsonify({"success": False, "error": "Keyword is required"}), 400
+            
+        # Ensure sites is a list and contains only valid values
+        if not isinstance(sites, list):
+            return jsonify({"success": False, "error": "sites must be a list"}), 400
+            
+        valid_sites = {'todocoleccion', 'craigslist', 'ebay'}
+        if not all(site in valid_sites for site in sites):
+            return jsonify({
+                "success": False, 
+                "error": f"Invalid site(s) provided. Must be one of: {', '.join(valid_sites)}"
+            }), 400
+        
+        # Initialize results
+        results = {}
+        success = True
+        
+        try:
+            if 'todocoleccion' in sites:
+                todocoleccion_result = TodocoleccionService.scrape_specific_keyword(keyword)
+                results['todocoleccion'] = todocoleccion_result
+                if not todocoleccion_result.get('success'):
+                    success = False
+            
+            if 'craigslist' in sites:
+                craigslist_result = CraigslistService.scrape_specific_keyword(keyword)
+                results['craigslist'] = craigslist_result
+                if not craigslist_result.get('success'):
+                    success = False
+                    
+            if 'ebay' in sites:
+                # Placeholder for eBay scraper
+                ebay_result = {
+                    "success": False,
+                    "error": "eBay scraper not implemented yet"
+                }
+                results['ebay'] = ebay_result
+                success = success and False
+                
+            return jsonify({
+                "success": success,
+                "keyword": keyword,
+                "results": results
+            })
+            
+        except Exception as e:
+            return jsonify({
+                "success": False, 
+                "error": f"Error during scraping: {str(e)}",
+                "results": results
+            }), 500
+        
+    except Exception as e:
         return jsonify({
-            'success': False,
-            'error': 'Missing required "keyword"'
-        }), 400
-
-    keyword = str(keyword).strip()
-
-    # Run scrapers serially; could be parallelized later if needed
-    results = {}
-    try:
-        results['todocoleccion'] = TodocoleccionService.scrape_specific_keyword(keyword)
-    except Exception as e:
-        results['todocoleccion'] = { 'success': False, 'error': str(e) }
-
-    try:
-        results['craigslist'] = CraigslistService.scrape_specific_keyword(keyword)
-    except Exception as e:
-        results['craigslist'] = { 'success': False, 'error': str(e) }
-
-    overall_success = any(r.get('success') for r in results.values() if isinstance(r, dict))
-
-    return jsonify({
-        'success': overall_success,
-        'keyword': keyword,
-        'results': results
-    }), 200 if overall_success else 500
+            "success": False, 
+            "error": f"Error during scraping: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     # Run the app in debug mode for development

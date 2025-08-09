@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Save, X, Check, AlertCircle, RefreshCw, UploadCloud, Globe } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Save, X, Check, AlertCircle, RefreshCw, Globe } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
 
 export interface Stopword {
@@ -27,7 +27,7 @@ const StopwordsPage = () => {
   const [editStopword, setEditStopword] = useState<Omit<Stopword, 'id' | 'created_at' | 'updated_at'>>({ ...emptyStopword });
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [syncLoading, setSyncLoading] = useState(false);
+  // const [syncLoading, setSyncLoading] = useState(false);
 
   // Clear messages after 3 seconds
   useEffect(() => {
@@ -146,23 +146,23 @@ const filteredStopwords = stopwords.filter(s =>
   };
 
   // Trigger push-cigar-listings API
-  const handleSyncCigarListings = async () => {
-    setSyncLoading(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      const resp = await fetch('http://127.0.0.1:5000/api/push-cigar-listings', { method: 'POST' });
-      const data = await resp.json();
-      if (resp.ok && data.success) {
-        setSuccess('Cigar listings synced successfully!');
-      } else {
-        setError(data.error || 'Failed to sync cigar listings');
-      }
-    } catch (err) {
-      setError('Failed to sync cigar listings');
-    }
-    setSyncLoading(false);
-  };
+  // const handleSyncCigarListings = async () => {
+  //   setSyncLoading(true);
+  //   setError(null);
+  //   setSuccess(null);
+  //   try {
+  //     const resp = await fetch('http://127.0.0.1:5000/api/push-cigar-listings', { method: 'POST' });
+  //     const data = await resp.json();
+  //     if (resp.ok && data.success) {
+  //       setSuccess('Cigar listings synced successfully!');
+  //     } else {
+  //       setError(data.error || 'Failed to sync cigar listings');
+  //     }
+  //   } catch (err) {
+  //     setError('Failed to sync cigar listings');
+  //   }
+  //   setSyncLoading(false);
+  // };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
@@ -201,14 +201,14 @@ const filteredStopwords = stopwords.filter(s =>
               <Plus className="w-5 h-5" />
               Add Stopword
             </button>
-            <button
+            {/* <button
               onClick={handleSyncCigarListings}
               disabled={syncLoading}
               className={`bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-medium shadow-lg hover:shadow-xl transition-all duration-200 ${syncLoading ? 'opacity-60 cursor-not-allowed' : 'hover:from-green-700 hover:to-blue-700'}`}
             >
               <UploadCloud className="w-5 h-5" />
               {syncLoading ? 'Syncing...' : 'Sync Cigar Listings'}
-            </button>
+            </button> */}
           </div>
         </div>
 

@@ -19,6 +19,9 @@ class BaseScraper(ABC):
         self.site_name = site_name
         self.session = requests.Session()
         self.setup_session()
+        # URL cache for duplicate checking optimization
+        self.existing_urls_cache = set()
+        self.cache_initialized = False
         
     def setup_session(self):
         """Setup session with headers and retry strategy"""
@@ -103,17 +106,71 @@ class BaseScraper(ABC):
         
         return cleaned.strip()
     
-    def save_listing(self, listing_data: Dict[str, Any]) -> bool:
-        """Save listing to database with duplicate checking"""
+    def initialize_url_cache(self) -> None:
+        """Initialize the URL cache by fetching all existing URLs from the database"""
         try:
-            # Check if URL already exists
-            if supabase_client.check_url_exists(listing_data['url']):
-                print(f"Listing already exists: {listing_data['url']}")
+            print(f"Initializing URL cache for {self.site_name} scraper...")
+            
+            # Fetch all URLs from scraped_listings table
+            response = supabase_client.client.table('scraped_listings').select('url').execute()
+            
+            if response.data:
+                self.existing_urls_cache = {item['url'] for item in response.data if item.get('url')}
+                print(f"Loaded {len(self.existing_urls_cache)} existing URLs into cache")
+            else:
+                self.existing_urls_cache = set()
+                print("No existing URLs found, initialized empty cache")
+                
+            self.cache_initialized = True
+            
+        except Exception as e:
+            print(f"Error initializing URL cache: {e}")
+            # Fallback to empty cache if there's an error
+            self.existing_urls_cache = set()
+            self.cache_initialized = True
+    
+    def add_url_to_cache(self, url: str) -> None:
+        """Add a URL to the cache after successful save"""
+        if url:
+            self.existing_urls_cache.add(url)
+    
+    def url_exists_in_cache(self, url: str) -> bool:
+        """Check if URL exists in cache"""
+        if not self.cache_initialized:
+            self.initialize_url_cache()
+        return url in self.existing_urls_cache
+    
+    def save_listing(self, listing_data: Dict[str, Any]) -> bool:
+        """Save listing to database with duplicate checking and stopword filtering"""
+        try:
+            # Import here to avoid circular imports
+            from services.stopword_service import StopwordService
+            
+            # Check for stopwords in title and description
+            title = listing_data.get('title', '')
+            description = listing_data.get('description', '')
+            
+            # Check if title contains stopwords
+            if title and StopwordService.contains_stopwords(title):
+                print(f"Listing filtered out due to stopwords in title: {title[:50]}...")
+                return False
+            
+            # Check if description contains stopwords
+            if description and StopwordService.contains_stopwords(description):
+                print(f"Listing filtered out due to stopwords in description: {title[:50]}...")
+                return False
+            
+            # Check if URL already exists using cache (much faster than DB query)
+            url = listing_data.get('url', '')
+            if self.url_exists_in_cache(url):
+                print(f"Listing already exists (cached): {url}")
                 return False
             
             # Save to database
             result = supabase_client.save_listing(listing_data)
             if result:
+                # Add URL to cache after successful save
+                self.add_url_to_cache(url)
                 print(f"Saved listing: {listing_data['title'][:50]}...")
                 return True
             else:
@@ -188,6 +245,9 @@ class BaseScraper(ABC):
     def run(self, keywords: List[str]) -> Dict[str, Any]:
         """Run scraper for multiple keywords"""
         print(f"Starting {self.site_name} scraper with {len(keywords)} keywords")
+        
+        # Initialize URL cache at the start of the run for optimal performance
+        self.initialize_url_cache()
         
         results = []
         start_time = time.time()

@@ -1,4 +1,5 @@
 import re
+import requests
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
 from .base_scraper import BaseScraper
@@ -11,47 +12,51 @@ class EbayScraper(BaseScraper):
     def __init__(self):
         super().__init__("ebay")
         self.base_url = "https://www.ebay.com"
+        # Initialize logger
+        import logging
+        self.logger = logging.getLogger(__name__)
         
     def build_search_url(self, keyword: str, page: int = 1) -> str:
-        """Build eBay search URL"""
+        """Build eBay search URL with exact structure from user requirements"""
         # Clean keyword for URL
         clean_keyword = keyword.replace(' ', '+')
         
-        # eBay search URL structure
-        if page == 1:
-            return f"{self.base_url}/sch/i.html?_nkw={clean_keyword}&_sacat=0"
-        else:
-            # eBay uses _pgn parameter for pagination
-            return f"{self.base_url}/sch/i.html?_nkw={clean_keyword}&_sacat=0&_pgn={page}"
+        # eBay search URL structure: _nkw=keyword&_sacat=0&_from=R40&_ipg=240&_pgn=page
+        return f"{self.base_url}/sch/i.html?_nkw={clean_keyword}&_sacat=0&_from=R40&_ipg=240&_pgn={page}"
     
     def extract_listings_from_page(self, html_content: str, keyword: str) -> List[Dict[str, Any]]:
-        """Extract listings from eBay search results page"""
+        """Extract listings from eBay search results page using user-specified DOM structure"""
         listings = []
         
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
             
-            # Find all listing items - eBay uses various selectors for different layouts
-            # Try multiple selectors to handle different eBay page layouts
-            listing_selectors = [
-                'div[data-testid="item-card"]',  # New eBay layout
-                'li.s-item',  # Traditional eBay layout
-                'div.s-item__wrapper',  # Alternative layout
-                'div[data-testid="s-item"]',  # Another possible selector
-            ]
+            # Check for eBay's "no more results" message first
+            if self._check_no_more_results(soup):
+                self.logger.info("Reached eBay's result limit or no more results")
+                return []
             
-            listing_elements = []
-            for selector in listing_selectors:
-                elements = soup.select(selector)
-                if elements:
-                    listing_elements = elements
-                    print(f"Found {len(elements)} listings using selector: {selector}")
-                    break
+            # Use the exact DOM structure provided by user: <ul class="srp-results srp-list clearfix"><li>
+            results_container = soup.find('ul', class_='srp-results srp-list clearfix')
+            if not results_container:
+                # Fallback to other possible containers
+                results_container = soup.find('ul', class_=re.compile(r'srp-results'))
+                if not results_container:
+                    self.logger.warning("Could not find eBay results container")
+                    return []
+            
+            # Find all <li> elements within the results container
+            listing_elements = results_container.find_all('li', class_='s-card s-card--horizontal')
+            if not listing_elements:
+                # Fallback to any <li> elements
+                listing_elements = results_container.find_all('li')
+            
+            self.logger.info(f"Found {len(listing_elements)} listings on page")
             
             if not listing_elements:
-                # Fallback: look for any div with item-related classes
-                listing_elements = soup.find_all('div', class_=re.compile(r'item|listing|product'))
-                print(f"Fallback: Found {len(listing_elements)} potential listings")
+                # Final fallback: look for any item-related elements
+                listing_elements = soup.find_all(['li', 'div'], class_=re.compile(r'item|listing|product|s-card'))
+                self.logger.info(f"Fallback: Found {len(listing_elements)} potential listings")
             
             for element in listing_elements:
                 try:
@@ -59,13 +64,13 @@ class EbayScraper(BaseScraper):
                     if listing:
                         listings.append(listing)
                 except Exception as e:
-                    print(f"Error extracting listing: {e}")
+                    self.logger.error(f"Error extracting listing: {e}")
                     continue
             
-            print(f"Successfully extracted {len(listings)} listings from page")
+            self.logger.info(f"Successfully extracted {len(listings)} listings from page")
             
         except Exception as e:
-            print(f"Error parsing HTML: {e}")
+            self.logger.error(f"Error parsing HTML: {e}")
         
         return listings
     
@@ -111,8 +116,9 @@ class EbayScraper(BaseScraper):
     
     def _extract_title(self, element) -> str:
         """Extract listing title"""
-        # Try multiple selectors for title
+        # Try multiple selectors for title based on user's DOM structure
         title_selectors = [
+            'div.s-card__title span.su-styled-text',  # From user's DOM
             'h3.s-item__title',
             'div.s-item__title span',
             '[data-testid="item-title"]',
@@ -138,8 +144,9 @@ class EbayScraper(BaseScraper):
     
     def _extract_price(self, element) -> float:
         """Extract listing price"""
-        # Try multiple selectors for price
+        # Try multiple selectors for price based on user's DOM structure
         price_selectors = [
+            'span.su-styled-text.s-card__price',  # From user's DOM
             'span.s-item__price',
             '.s-item__price',
             '[data-testid="item-price"]',
@@ -159,8 +166,10 @@ class EbayScraper(BaseScraper):
     
     def _extract_url(self, element) -> str:
         """Extract listing URL"""
-        # Try to find the main listing link
+        # Try to find the main listing link based on user's DOM structure
         url_selectors = [
+            'a.su-link',  # From user's DOM
+            'a.image-treatment',  # From user's DOM
             'a.s-item__link',
             'a[data-testid="item-link"]',
             'a[href*="/itm/"]',
@@ -194,8 +203,9 @@ class EbayScraper(BaseScraper):
         """Extract listing images"""
         images = []
         
-        # Try multiple selectors for images
+        # Try multiple selectors for images based on user's DOM structure
         img_selectors = [
+            'img.s-card__image',  # From user's DOM
             'img.s-item__image-img',
             'img[data-testid="item-image"]',
             'img[class*="image"]',
@@ -231,8 +241,9 @@ class EbayScraper(BaseScraper):
     
     def _extract_description(self, element) -> str:
         """Extract listing description/snippet"""
-        # Try multiple selectors for description
+        # Try multiple selectors for description based on user's DOM structure
         desc_selectors = [
+            'div.s-card__subtitle span.su-styled-text',  # From user's DOM
             'div.s-item__subtitle',
             '.s-item__subtitle',
             '[data-testid="item-subtitle"]',
@@ -252,4 +263,28 @@ class EbayScraper(BaseScraper):
         if desc_elem:
             return desc_elem.get_text(strip=True)
         
-        return "" 
+        return ""
+    
+    def _check_no_more_results(self, soup) -> bool:
+        """Check if eBay shows the 'no more results' message"""
+        # Check for the specific message mentioned by user
+        no_results_messages = [
+            "We're unable to show you more than 10,000 results. Please refine your search to narrow your results.",
+            "The userLocation city, state and zipcode were ignored because the zipcode is invalid or not supported for the country.",
+            "No results found",
+            "0 results"
+        ]
+        
+        page_text = soup.get_text().lower()
+        for message in no_results_messages:
+            if message.lower() in page_text:
+                return True
+        
+        # Also check for empty results container
+        results_container = soup.find('ul', class_='srp-results srp-list clearfix')
+        if results_container:
+            listings = results_container.find_all('li')
+            if len(listings) == 0:
+                return True
+        
+        return False 

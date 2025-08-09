@@ -112,4 +112,48 @@ class StopwordService:
                 'inactive_stopwords': len(all_stopwords) - len(active_stopwords)
             }
         except Exception as e:
-            raise Exception(f"Error getting stopword statistics: {e}") 
+            raise Exception(f"Error getting stopword statistics: {e}")
+
+    @staticmethod
+    def contains_stopwords(text: str) -> bool:
+        """
+        Check if the given text contains any active stopwords.
+        Returns True if stopwords are found, False otherwise.
+        """
+        if not text or not text.strip():
+            return False
+            
+        try:
+            # Get all active stopwords
+            stopwords = StopwordService.get_all_stopwords()
+            if not stopwords:
+                return False
+                
+            # Convert text to uppercase for case-insensitive comparison
+            text_upper = text.upper()
+            
+            # Check if any stopword is present in the text
+            for stopword_data in stopwords:
+                stopword = stopword_data.get('stopword', '').strip().upper()
+                if stopword and stopword in text_upper:
+                    return True
+                    
+            return False
+            
+        except Exception as e:
+            # If there's an error fetching stopwords, log it but don't block the process
+            print(f"Warning: Error checking stopwords: {e}")
+            return False
+
+    @staticmethod
+    def get_active_stopwords_list() -> List[str]:
+        """
+        Get a list of all active stopwords as uppercase strings.
+        Used for bulk filtering operations.
+        """
+        try:
+            stopwords = StopwordService.get_all_stopwords()
+            return [sw.get('stopword', '').strip().upper() for sw in stopwords if sw.get('stopword', '').strip()]
+        except Exception as e:
+            print(f"Warning: Error fetching stopwords list: {e}")
+            return [] 
