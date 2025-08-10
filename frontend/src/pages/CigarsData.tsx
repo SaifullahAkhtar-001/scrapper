@@ -1,6 +1,20 @@
-import { useEffect, useState } from 'react';
-import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, Image as ImageIcon, Copy, Check, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
-import { supabase } from '../components/SupabaseClient';
+import { useEffect, useState } from "react";
+import {
+  ExternalLink,
+  RefreshCw,
+  AlertCircle,
+  Search,
+  Calendar,
+  DollarSign,
+  Eye,
+  Image as ImageIcon,
+  Copy,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Trash2,
+} from "lucide-react";
+import { supabase } from "../components/SupabaseClient";
 
 export interface ScrapedListing {
   id: number;
@@ -13,6 +27,7 @@ export interface ScrapedListing {
   keyword: string;
   created_at: string | null;
   updated_at: string | null;
+  parent_id: number;
 }
 
 export interface Keyword {
@@ -28,15 +43,15 @@ const DataPage = () => {
   const [listings, setListings] = useState<ScrapedListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSite, setSelectedSite] = useState('all');
-  const [selectedKeyword, setSelectedKeyword] = useState('all');
-  const [priceRange] = useState({ min: '', max: '' });
-  const [sortBy, setSortBy] = useState('newest');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedKeyword, setSelectedKeyword] = useState("all");
+  const [priceRange] = useState({ min: "", max: "" });
+  const [sortBy, setSortBy] = useState("newest");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [availableKeywords, setAvailableKeywords] = useState<Keyword[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
@@ -47,18 +62,18 @@ const DataPage = () => {
   const fetchKeywords = async () => {
     try {
       const { data, error } = await supabase
-        .from('keywords')
-        .select('*')
-        .eq('is_active', true)
-        .order('keyword', { ascending: true });
-      
+        .from("keywords")
+        .select("*")
+        .eq("is_active", true)
+        .order("keyword", { ascending: true });
+
       if (error) {
-        console.error('Error fetching keywords:', error);
+        console.error("Error fetching keywords:", error);
       } else {
         setAvailableKeywords(data as Keyword[]);
       }
     } catch (err) {
-      console.error('Failed to fetch keywords:', err);
+      console.error("Failed to fetch keywords:", err);
     }
   };
 
@@ -67,43 +82,45 @@ const DataPage = () => {
     setError(null);
     try {
       // Build query
-      let query = supabase.from('cigar_listings').select('*', { count: 'exact' });
-      
+      let query = supabase
+        .from("cigar_listings")
+        .select("*", { count: "exact" });
+
       // Apply filters
       if (searchQuery) {
-        query = query.ilike('title', `%${searchQuery}%`);
+        query = query.ilike("title", `%${searchQuery}%`);
       }
-      if (selectedSite !== 'all') {
-        query = query.eq('site', selectedSite);
+      if (selectedSite !== "all") {
+        query = query.eq("site", selectedSite);
       }
-      if (selectedKeyword !== 'all') {
-        query = query.ilike('title', `%${selectedKeyword}%`);
+      if (selectedKeyword !== "all") {
+        query = query.ilike("title", `%${selectedKeyword}%`);
       }
       if (priceRange.min) {
-        query = query.gte('price', parseFloat(priceRange.min));
+        query = query.gte("price", parseFloat(priceRange.min));
       }
       if (priceRange.max) {
-        query = query.lte('price', parseFloat(priceRange.max));
+        query = query.lte("price", parseFloat(priceRange.max));
       }
-      
+
       // Apply sorting
-      if (sortBy === 'newest') {
-        query = query.order('created_at', { ascending: false });
-      } else if (sortBy === 'oldest') {
-        query = query.order('created_at', { ascending: true });
-      } else if (sortBy === 'price-high') {
-        query = query.order('price', { ascending: false });
-      } else if (sortBy === 'price-low') {
-        query = query.order('price', { ascending: true });
+      if (sortBy === "newest") {
+        query = query.order("created_at", { ascending: false });
+      } else if (sortBy === "oldest") {
+        query = query.order("created_at", { ascending: true });
+      } else if (sortBy === "price-high") {
+        query = query.order("price", { ascending: false });
+      } else if (sortBy === "price-low") {
+        query = query.order("price", { ascending: true });
       }
-      
+
       // Apply pagination
       const from = (currentPage - 1) * pageSize;
       const to = from + pageSize - 1;
       query = query.range(from, to);
-      
+
       const { data, error, count } = await query;
-      
+
       if (error) setError(error.message);
       else {
         setListings(data as ScrapedListing[]);
@@ -111,7 +128,7 @@ const DataPage = () => {
         setTotalPages(Math.ceil((count || 0) / pageSize));
       }
     } catch (err) {
-      setError('Failed to fetch listings');
+      setError("Failed to fetch listings");
     }
     setLoading(false);
   };
@@ -122,7 +139,15 @@ const DataPage = () => {
 
   useEffect(() => {
     fetchListings();
-  }, [currentPage, pageSize, searchQuery, selectedSite, selectedKeyword, priceRange, sortBy]);
+  }, [
+    currentPage,
+    pageSize,
+    searchQuery,
+    selectedSite,
+    selectedKeyword,
+    priceRange,
+    sortBy,
+  ]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -140,28 +165,37 @@ const DataPage = () => {
 
   const highlightKeywordInTitle = (title: string, keyword: string) => {
     if (!keyword) return title;
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escaped})`, 'ig');
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "ig");
     const parts = title.split(regex);
     return parts.map((part, idx) =>
       part.toLowerCase() === keyword.toLowerCase() ? (
-        <mark key={idx} className="bg-yellow-200 rounded px-1">{part}</mark>
+        <mark key={idx} className="bg-yellow-200 rounded px-1">
+          {part}
+        </mark>
       ) : (
         <span key={idx}>{part}</span>
       )
     );
   };
 
-  const handleUnsaveListing = async (id: number) => {
+  const handleUnsaveListing = async (id: number, parent_id: number) => {
     try {
       setDeletingId(id);
-      const { error } = await supabase.from('cigar_listings').delete().eq('id', id);
-      if (error) throw error;
+      const { error: updateError } = await supabase
+        .from("scraped_listings")
+        .update({ saved: false })
+        .eq("id", parent_id);
+      const { error } = await supabase
+        .from("cigar_listings")
+        .delete()
+        .eq("id", id);
+      if (error || updateError) throw error || updateError;
       setListings((prev) => prev.filter((l) => l.id !== id));
       setTotalCount((prev) => Math.max(0, prev - 1));
     } catch (e) {
-      console.error('Failed to unsave listing:', e);
-      setError('Failed to unsave listing');
+      console.error("Failed to unsave listing:", e);
+      setError("Failed to unsave listing");
     } finally {
       setDeletingId(null);
     }
@@ -171,7 +205,7 @@ const DataPage = () => {
   const getPageNumbers = () => {
     const pages = [];
     const maxVisiblePages = 5;
-    
+
     if (totalPages <= maxVisiblePages) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
@@ -181,25 +215,25 @@ const DataPage = () => {
         for (let i = 1; i <= 4; i++) {
           pages.push(i);
         }
-        pages.push('...');
+        pages.push("...");
         pages.push(totalPages);
       } else if (currentPage >= totalPages - 2) {
         pages.push(1);
-        pages.push('...');
+        pages.push("...");
         for (let i = totalPages - 3; i <= totalPages; i++) {
           pages.push(i);
         }
       } else {
         pages.push(1);
-        pages.push('...');
+        pages.push("...");
         for (let i = currentPage - 1; i <= currentPage + 1; i++) {
           pages.push(i);
         }
-        pages.push('...');
+        pages.push("...");
         pages.push(totalPages);
       }
     }
-    
+
     return pages;
   };
 
@@ -213,10 +247,14 @@ const DataPage = () => {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
                 Scraped Listings
               </h1>
-              <p className="text-slate-600 mt-2">Browse and manage your scraped data</p>
+              <p className="text-slate-600 mt-2">
+                Browse and manage your scraped data
+              </p>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold text-slate-800">{totalCount}</div>
+              <div className="text-3xl font-bold text-slate-800">
+                {totalCount}
+              </div>
               <div className="text-sm text-slate-500">Total Listings</div>
             </div>
           </div>
@@ -249,8 +287,13 @@ const DataPage = () => {
             >
               <option value="all">All Keywords</option>
               {availableKeywords.map((keyword) => (
-                <option key={keyword.id} value={keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ''}>
-                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ''}
+                <option
+                  key={keyword.id}
+                  value={
+                    keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""
+                  }
+                >
+                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
                 </option>
               ))}
             </select>
@@ -287,10 +330,12 @@ const DataPage = () => {
             <div className="text-center py-16">
               <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <h3 className="text-xl font-medium text-slate-600 mb-2">
-                {searchQuery ? 'No matching listings' : 'No listings found'}
+                {searchQuery ? "No matching listings" : "No listings found"}
               </h3>
               <p className="text-slate-500">
-                {searchQuery ? 'Try adjusting your search terms' : 'Start scraping to see data here'}
+                {searchQuery
+                  ? "Try adjusting your search terms"
+                  : "Start scraping to see data here"}
               </p>
             </div>
           ) : (
@@ -325,7 +370,10 @@ const DataPage = () => {
                       {/* Content */}
                       <div className="p-4">
                         <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
-                          {highlightKeywordInTitle(listing.title, listing.keyword)}
+                          {highlightKeywordInTitle(
+                            listing.title,
+                            listing.keyword
+                          )}
                         </h3>
                         <div className="mb-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
@@ -343,7 +391,11 @@ const DataPage = () => {
                           <div className="flex items-center justify-between text-xs text-slate-500">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
-                              {listing.created_at ? new Date(listing.created_at).toLocaleDateString() : 'N/A'}
+                              {listing.created_at
+                                ? new Date(
+                                    listing.created_at
+                                  ).toLocaleDateString()
+                                : "N/A"}
                             </div>
                             <span>ID: {listing.id}</span>
                           </div>
@@ -371,7 +423,9 @@ const DataPage = () => {
                           </a>
                           <button
                             className="p-2 rounded-lg transition-colors relative group/unsave hover:bg-red-50 text-red-700"
-                            onClick={() => handleUnsaveListing(listing.id)}
+                            onClick={() =>
+                              handleUnsaveListing(listing.id, listing.parent_id)
+                            }
                             disabled={deletingId === listing.id}
                             type="button"
                             aria-label="Unsave listing"
@@ -416,11 +470,15 @@ const DataPage = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-slate-600">
-                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
+                      Showing {(currentPage - 1) * pageSize + 1} to{" "}
+                      {Math.min(currentPage * pageSize, totalCount)} of{" "}
+                      {totalCount} results
                     </span>
                     <select
                       value={pageSize}
-                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      onChange={(e) =>
+                        handlePageSizeChange(Number(e.target.value))
+                      }
                       className="px-3 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value={6}>6 per page</option>
@@ -429,7 +487,7 @@ const DataPage = () => {
                       <option value={48}>48 per page</option>
                     </select>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
@@ -438,24 +496,26 @@ const DataPage = () => {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    
+
                     {getPageNumbers().map((page, index) => (
                       <button
                         key={index}
-                        onClick={() => typeof page === 'number' && handlePageChange(page)}
-                        disabled={page === '...'}
+                        onClick={() =>
+                          typeof page === "number" && handlePageChange(page)
+                        }
+                        disabled={page === "..."}
                         className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                           page === currentPage
-                            ? 'bg-blue-600 text-white'
-                            : page === '...'
-                            ? 'text-slate-400 cursor-default'
-                            : 'hover:bg-white text-slate-600'
+                            ? "bg-blue-600 text-white"
+                            : page === "..."
+                            ? "text-slate-400 cursor-default"
+                            : "hover:bg-white text-slate-600"
                         }`}
                       >
                         {page}
                       </button>
                     ))}
-                    
+
                     <button
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}

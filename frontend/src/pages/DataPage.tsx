@@ -1,6 +1,21 @@
-import { useEffect, useState } from 'react';
-import { ExternalLink, RefreshCw, AlertCircle, Search, Calendar, DollarSign, Eye, Image as ImageIcon, Copy, Check, ChevronLeft, ChevronRight, Save as SaveIcon, Trash2 } from 'lucide-react';
-import { supabase } from '../components/SupabaseClient';
+import { useEffect, useState } from "react";
+import {
+  ExternalLink,
+  RefreshCw,
+  AlertCircle,
+  Search,
+  Calendar,
+  DollarSign,
+  Eye,
+  Image as ImageIcon,
+  Copy,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Save as SaveIcon,
+  Trash2,
+} from "lucide-react";
+import { supabase } from "../components/SupabaseClient";
 
 export interface ScrapedListing {
   id: number;
@@ -28,17 +43,17 @@ const DataPage = () => {
   const [listings, setListings] = useState<ScrapedListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSite, setSelectedSite] = useState('all');
-  const [selectedKeyword, setSelectedKeyword] = useState('all');
-  const [priceRange] = useState({ min: '', max: '' });
-  const [sortBy, setSortBy] = useState('newest');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedKeyword, setSelectedKeyword] = useState("all");
+  const [priceRange] = useState({ min: "", max: "" });
+  const [sortBy, setSortBy] = useState("newest");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [availableKeywords, setAvailableKeywords] = useState<Keyword[]>([]);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
@@ -49,69 +64,79 @@ const DataPage = () => {
   const fetchKeywords = async () => {
     try {
       const { data, error } = await supabase
-        .from('keywords')
-        .select('*')
-        .eq('is_active', true)
-        .order('keyword', { ascending: true });
-      
+        .from("keywords")
+        .select("*")
+        .eq("is_active", true)
+        .order("keyword", { ascending: true });
+
       if (error) {
-        console.error('Error fetching keywords:', error);
+        console.error("Error fetching keywords:", error);
       } else {
         setAvailableKeywords(data as Keyword[]);
       }
     } catch (err) {
-      console.error('Failed to fetch keywords:', err);
+      console.error("Failed to fetch keywords:", err);
     }
   };
 
   const fetchListings = async () => {
-    console.log('Starting to fetch listings...');
+    console.log("Starting to fetch listings...");
     setLoading(true);
     setError(null);
-    
+
     try {
       // Build query
-      let query = supabase.from('scraped_listings').select('*', { count: 'exact' });
-      
+      let query = supabase
+        .from("scraped_listings")
+        .select("*", { count: "exact" });
+
       // Apply filters
       if (searchQuery) {
-        query = query.ilike('title', `%${searchQuery}%`);
+        query = query.ilike("title", `%${searchQuery}%`);
       }
-      if (selectedSite !== 'all') {
-        query = query.eq('site', selectedSite);
+      if (selectedSite !== "all") {
+        query = query.eq("site", selectedSite);
       }
-      if (selectedKeyword !== 'all') {
-        query = query.ilike('title', `%${selectedKeyword}%`);
+      if (selectedKeyword !== "all") {
+        query = query.ilike("title", `%${selectedKeyword}%`);
       }
       if (priceRange.min) {
-        query = query.gte('price', parseFloat(priceRange.min));
+        query = query.gte("price", parseFloat(priceRange.min));
       }
       if (priceRange.max) {
-        query = query.lte('price', parseFloat(priceRange.max));
+        query = query.lte("price", parseFloat(priceRange.max));
       }
-      
-      // Apply sorting
-      if (sortBy === 'newest') {
-        query = query.order('created_at', { ascending: false });
-      } else if (sortBy === 'oldest') {
-        query = query.order('created_at', { ascending: true });
-      } else if (sortBy === 'price-high') {
-        query = query.order('price', { ascending: false });
-      } else if (sortBy === 'price-low') {
-        query = query.order('price', { ascending: true });
+
+      // Apply sorting - default to highest ID first (newest)
+      if (sortBy === "oldest") {
+        query = query.order("id", { ascending: true });
+      } else if (sortBy === "price-high") {
+        query = query.order("price", { ascending: false });
+      } else if (sortBy === "price-low") {
+        query = query.order("price", { ascending: true });
+      } else {
+        // Default sort: highest ID first (newest)
+        query = query.order("id", { ascending: false });
       }
-      
+
       // Apply pagination
       const from = (currentPage - 1) * pageSize;
       const to = from + pageSize - 1;
       query = query.range(from, to);
-      
-      console.log('Executing Supabase query...');
+
+      console.log("Executing Supabase query...");
       const { data, error, count } = await query;
-      console.log('Supabase query completed. Data:', data, 'Error:', error, 'Count:', count);
-      
+      console.log(
+        "Supabase query completed. Data:",
+        data,
+        "Error:",
+        error,
+        "Count:",
+        count
+      );
+
       if (error) {
-        console.error('Error from Supabase:', error);
+        console.error("Error from Supabase:", error);
         setError(error.message);
       } else {
         setListings(data as ScrapedListing[]);
@@ -119,7 +144,7 @@ const DataPage = () => {
         setTotalPages(Math.ceil((count || 0) / pageSize));
       }
     } catch (err) {
-      console.error('Failed to fetch listings:', err);
+      console.error("Failed to fetch listings:", err);
     }
     setLoading(false);
   };
@@ -129,11 +154,25 @@ const DataPage = () => {
   }, []);
 
   useEffect(() => {
-    console.log('useEffect triggered with dependencies:', {
-      currentPage, pageSize, searchQuery, selectedSite, selectedKeyword, priceRange, sortBy
+    console.log("useEffect triggered with dependencies:", {
+      currentPage,
+      pageSize,
+      searchQuery,
+      selectedSite,
+      selectedKeyword,
+      priceRange,
+      sortBy,
     });
     fetchListings();
-  }, [currentPage, pageSize, searchQuery, selectedSite, selectedKeyword, priceRange, sortBy]);
+  }, [
+    currentPage,
+    pageSize,
+    searchQuery,
+    selectedSite,
+    selectedKeyword,
+    priceRange,
+    sortBy,
+  ]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -151,12 +190,14 @@ const DataPage = () => {
 
   const highlightKeywordInTitle = (title: string, keyword: string) => {
     if (!keyword) return title;
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escaped})`, 'ig');
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const regex = new RegExp(`(${escaped})`, "ig");
     const parts = title.split(regex);
     return parts.map((part, idx) =>
       part.toLowerCase() === keyword.toLowerCase() ? (
-        <mark key={idx} className="bg-yellow-200 rounded px-1">{part}</mark>
+        <mark key={idx} className="bg-yellow-200 rounded px-1">
+          {part}
+        </mark>
       ) : (
         <span key={idx}>{part}</span>
       )
@@ -166,7 +207,18 @@ const DataPage = () => {
   const handleSaveListing = async (listing: ScrapedListing) => {
     try {
       setSavingId(listing.id);
-      const { error } = await supabase.from('cigar_listings').insert([
+      
+      // Update the listing in the database
+      const { error: update_error } = await supabase
+        .from("scraped_listings")
+        .update({
+          saved: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", listing.id);
+
+      // Add to cigar_listings
+      const { error } = await supabase.from("cigar_listings").insert([
         {
           title: listing.title,
           url: listing.url,
@@ -175,18 +227,35 @@ const DataPage = () => {
           description: listing.description,
           site: listing.site,
           keyword: listing.keyword,
+          created_at: new Date().toISOString(),
+          parent_id: listing.id,
         },
       ]);
-      if (error) {
+
+      if (error || update_error) {
         // Treat unique violation (already saved) as success for UX
-        if ((error as any).code !== '23505') {
-          throw error;
+        if ((error as any).code !== "23505") {
+          throw error || update_error;
         }
       }
-      setSavedIds((prev) => new Set(prev).add(listing.id));
+
+      // Update local state
+      setListings(prevListings => 
+        prevListings.map(item => 
+          item.id === listing.id 
+            ? { ...item, saved: true, updated_at: new Date().toISOString() } 
+            : item
+        )
+      );
+      
+      // Update saved IDs
+      setSavedIds(prev => new Set([...prev, listing.id]));
+      
+      // Show success message
+      setError(null);
     } catch (e) {
-      console.error('Failed to save listing:', e);
-      setError('Failed to save listing');
+      console.error("Failed to save listing:", e);
+      setError("Failed to save listing");
     } finally {
       setSavingId(null);
     }
@@ -195,13 +264,16 @@ const DataPage = () => {
   const handleDeleteListing = async (id: number) => {
     try {
       setDeletingId(id);
-      const { error } = await supabase.from('scraped_listings').delete().eq('id', id);
+      const { error } = await supabase
+        .from("scraped_listings")
+        .delete()
+        .eq("id", id);
       if (error) throw error;
       setListings((prev) => prev.filter((l) => l.id !== id));
       setTotalCount((prev) => Math.max(0, prev - 1));
     } catch (e) {
-      console.error('Failed to delete listing:', e);
-      setError('Failed to delete listing');
+      console.error("Failed to delete listing:", e);
+      setError("Failed to delete listing");
     } finally {
       setDeletingId(null);
     }
@@ -211,7 +283,7 @@ const DataPage = () => {
   const getPageNumbers = () => {
     const pages = [];
     const maxVisiblePages = 5;
-    
+
     if (totalPages <= maxVisiblePages) {
       for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
@@ -221,25 +293,25 @@ const DataPage = () => {
         for (let i = 1; i <= 4; i++) {
           pages.push(i);
         }
-        pages.push('...');
+        pages.push("...");
         pages.push(totalPages);
       } else if (currentPage >= totalPages - 2) {
         pages.push(1);
-        pages.push('...');
+        pages.push("...");
         for (let i = totalPages - 3; i <= totalPages; i++) {
           pages.push(i);
         }
       } else {
         pages.push(1);
-        pages.push('...');
+        pages.push("...");
         for (let i = currentPage - 1; i <= currentPage + 1; i++) {
           pages.push(i);
         }
-        pages.push('...');
+        pages.push("...");
         pages.push(totalPages);
       }
     }
-    
+
     return pages;
   };
 
@@ -253,10 +325,14 @@ const DataPage = () => {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
                 Scraped Listings
               </h1>
-              <p className="text-slate-600 mt-2">Browse and manage your scraped data</p>
+              <p className="text-slate-600 mt-2">
+                Browse and manage your scraped data
+              </p>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold text-slate-800">{totalCount}</div>
+              <div className="text-3xl font-bold text-slate-800">
+                {totalCount}
+              </div>
               <div className="text-sm text-slate-500">Total Listings</div>
             </div>
           </div>
@@ -290,8 +366,13 @@ const DataPage = () => {
             >
               <option value="all">All Keywords</option>
               {availableKeywords.map((keyword) => (
-                <option key={keyword.id} value={keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ''}>
-                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ''}
+                <option
+                  key={keyword.id}
+                  value={
+                    keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""
+                  }
+                >
+                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
                 </option>
               ))}
             </select>
@@ -328,10 +409,12 @@ const DataPage = () => {
             <div className="text-center py-16">
               <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
               <h3 className="text-xl font-medium text-slate-600 mb-2">
-                {searchQuery ? 'No matching listings' : 'No listings found'}
+                {searchQuery ? "No matching listings" : "No listings found"}
               </h3>
               <p className="text-slate-500">
-                {searchQuery ? 'Try adjusting your search terms' : 'Start scraping to see data here'}
+                {searchQuery
+                  ? "Try adjusting your search terms"
+                  : "Start scraping to see data here"}
               </p>
             </div>
           ) : (
@@ -366,7 +449,10 @@ const DataPage = () => {
                       {/* Content */}
                       <div className="p-4">
                         <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
-                          {highlightKeywordInTitle(listing.title, listing.keyword)}
+                          {highlightKeywordInTitle(
+                            listing.title,
+                            listing.keyword
+                          )}
                         </h3>
                         <div className="mb-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
@@ -384,7 +470,11 @@ const DataPage = () => {
                           <div className="flex items-center justify-between text-xs text-slate-500">
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
-                              {listing.created_at ? new Date(listing.created_at).toLocaleDateString() : 'N/A'}
+                              {listing.created_at
+                                ? new Date(
+                                    listing.created_at
+                                  ).toLocaleDateString()
+                                : "N/A"}
                             </div>
                             <span>ID: {listing.id}</span>
                           </div>
@@ -411,9 +501,16 @@ const DataPage = () => {
                             <ExternalLink className="w-3 h-3" />
                           </a>
                           <button
-                            className={`p-2 rounded-lg transition-colors relative group/save ${savedIds.has(listing.id) ? 'bg-green-50 text-green-700' : 'hover:bg-green-50 text-green-700'}`}
+                            className={`p-2 rounded-lg transition-colors relative group/save ${
+                              savedIds.has(listing.id)
+                                ? "bg-green-50 text-green-700"
+                                : "hover:bg-green-50 text-green-700"
+                            }`}
                             onClick={() => handleSaveListing(listing)}
-                            disabled={savingId === listing.id || savedIds.has(listing.id)}
+                            disabled={
+                              savingId === listing.id ||
+                              savedIds.has(listing.id)
+                            }
                             type="button"
                             aria-label="Save listing"
                           >
@@ -425,7 +522,7 @@ const DataPage = () => {
                               <SaveIcon className="w-4 h-4" />
                             )}
                             <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/save:opacity-100 pointer-events-none transition-opacity">
-                              {savedIds.has(listing.id) ? 'Saved' : 'Save'}
+                              {savedIds.has(listing.id) ? "Saved" : "Save"}
                             </span>
                           </button>
                           <button
@@ -475,11 +572,15 @@ const DataPage = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-slate-600">
-                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
+                      Showing {(currentPage - 1) * pageSize + 1} to{" "}
+                      {Math.min(currentPage * pageSize, totalCount)} of{" "}
+                      {totalCount} results
                     </span>
                     <select
                       value={pageSize}
-                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                      onChange={(e) =>
+                        handlePageSizeChange(Number(e.target.value))
+                      }
                       className="px-3 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value={6}>6 per page</option>
@@ -488,7 +589,7 @@ const DataPage = () => {
                       <option value={48}>48 per page</option>
                     </select>
                   </div>
-                  
+
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handlePageChange(currentPage - 1)}
@@ -497,24 +598,26 @@ const DataPage = () => {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    
+
                     {getPageNumbers().map((page, index) => (
                       <button
                         key={index}
-                        onClick={() => typeof page === 'number' && handlePageChange(page)}
-                        disabled={page === '...'}
+                        onClick={() =>
+                          typeof page === "number" && handlePageChange(page)
+                        }
+                        disabled={page === "..."}
                         className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                           page === currentPage
-                            ? 'bg-blue-600 text-white'
-                            : page === '...'
-                            ? 'text-slate-400 cursor-default'
-                            : 'hover:bg-white text-slate-600'
+                            ? "bg-blue-600 text-white"
+                            : page === "..."
+                            ? "text-slate-400 cursor-default"
+                            : "hover:bg-white text-slate-600"
                         }`}
                       >
                         {page}
                       </button>
                     ))}
-                    
+
                     <button
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
