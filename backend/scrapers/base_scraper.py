@@ -1,0 +1,289 @@
+import time
+import random
+import requests
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+# Removed fake_useragent import to avoid suspicious user agents
+from config.supabase_client import supabase_client
+
+class BaseScraper(ABC):
+    """
+    Base class for all scrapers. Provides common functionality like:
+    - Rate limiting and delays
+    - Error handling and retries
+    - Data standardization
+    - Database operations
+    """
+    
+    def __init__(self, site_name: str):
+        self.site_name = site_name
+        self.session = requests.Session()
+        self.setup_session()
+        # URL cache for duplicate checking optimization
+        self.existing_urls_cache = set()
+        self.cache_initialized = False
+        
+    def setup_session(self):
+        """Setup session with headers and retry strategy"""
+        self.session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9,es;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Cache-Control': 'max-age=0'
+        })
+    
+    def get_random_delay(self, min_delay: float = 2.0, max_delay: float = 5.0) -> float:
+        """Get a random delay between requests to avoid detection"""
+        return random.uniform(min_delay, max_delay)
+    
+    def safe_request(self, url: str, max_retries: int = 3) -> Optional[requests.Response]:
+        """Make a safe HTTP request with retries and error handling"""
+        for attempt in range(max_retries):
+            try:
+                # Add random delay
+                time.sleep(self.get_random_delay())
+                
+                # Keep consistent user agent to avoid detection
+                pass
+                
+                response = self.session.get(url, timeout=30)
+                response.raise_for_status()
+                return response
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Request failed (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    print(f"Failed to fetch {url} after {max_retries} attempts")
+                    return None
+                time.sleep(2 ** attempt)  # Exponential backoff
+        
+        return None
+    
+    def standardize_price(self, price_str: str) -> Optional[float]:
+        """Convert price string to float, handling various formats"""
+        if not price_str:
+            return None
+            
+        try:
+            # Remove currency symbols and whitespace
+            cleaned = ''.join(c for c in price_str if c.isdigit() or c in '.,')
+            
+            # Handle different decimal separators
+            if ',' in cleaned and '.' in cleaned:
+                # Format like "1,234.56" or "1.234,56"
+                if cleaned.rfind('.') > cleaned.rfind(','):
+                    cleaned = cleaned.replace(',', '')
+                else:
+                    cleaned = cleaned.replace('.', '').replace(',', '.')
+            elif ',' in cleaned:
+                # Assume comma is decimal separator if no period
+                cleaned = cleaned.replace(',', '.')
+            
+            return float(cleaned)
+        except (ValueError, AttributeError):
+            return None
+    
+    def clean_title(self, title: str) -> str:
+        """Clean and standardize listing title"""
+        if not title:
+            return ""
+        
+        # Remove extra whitespace and normalize
+        cleaned = ' '.join(title.split())
+        
+        # Remove common unwanted prefixes/suffixes
+        unwanted = ['NEW', 'USED', 'VINTAGE', 'AUTHENTIC', 'ORIGINAL']
+        for word in unwanted:
+            cleaned = cleaned.replace(word, '').replace(word.lower(), '')
+        
+        return cleaned.strip()
+    
+    def initialize_url_cache(self) -> None:
+        """Initialize the URL cache by fetching all existing URLs from the database"""
+        try:
+            print(f"Initializing URL cache for {self.site_name} scraper...")
+            
+            # Fetch all URLs from scraped_listings table
+            response = supabase_client.client.table('scraped_listings').select('url').execute()
+            
+            if response.data:
+                self.existing_urls_cache = {item['url'] for item in response.data if item.get('url')}
+                print(f"Loaded {len(self.existing_urls_cache)} existing URLs into cache")
+            else:
+                self.existing_urls_cache = set()
+                print("No existing URLs found, initialized empty cache")
+                
+            self.cache_initialized = True
+            
+        except Exception as e:
+            print(f"Error initializing URL cache: {e}")
+            # Fallback to empty cache if there's an error
+            self.existing_urls_cache = set()
+            self.cache_initialized = True
+    
+    def add_url_to_cache(self, url: str) -> None:
+        """Add a URL to the cache after successful save"""
+        if url:
+            self.existing_urls_cache.add(url)
+    
+    def url_exists_in_cache(self, url: str) -> bool:
+        """Check if URL exists in cache"""
+        if not self.cache_initialized:
+            self.initialize_url_cache()
+        return url in self.existing_urls_cache
+    
+    def save_listing(self, listing_data: Dict[str, Any]) -> bool:
+        """Save listing to database with duplicate checking and stopword filtering"""
+        try:
+            # Import here to avoid circular imports
+            from services.stopword_service import StopwordService
+            
+            # Check for stopwords in title and description
+            title = listing_data.get('title', '')
+            description = listing_data.get('description', '')
+            
+            # Check if title contains stopwords
+            if title and StopwordService.contains_stopwords(title):
+                print(f"Listing filtered out due to stopwords in title: {title[:50]}...")
+                return False
+            
+            # Check if description contains stopwords
+            if description and StopwordService.contains_stopwords(description):
+                print(f"Listing filtered out due to stopwords in description: {title[:50]}...")
+                return False
+            
+            # Check if URL already exists using cache (much faster than DB query)
+            url = listing_data.get('url', '')
+            if self.url_exists_in_cache(url):
+                print(f"Listing already exists (cached): {url}")
+                return False
+            
+            # Save to database
+            result = supabase_client.save_listing(listing_data)
+            if result:
+                # Add URL to cache after successful save
+                self.add_url_to_cache(url)
+                print(f"Saved listing: {listing_data['title'][:50]}...")
+                return True
+            else:
+                print(f"Failed to save listing: {listing_data['title'][:50]}...")
+                return False
+                
+        except Exception as e:
+            print(f"Error saving listing: {e}")
+            return False
+    
+    @abstractmethod
+    def build_search_url(self, keyword: str, page: int = 1) -> str:
+        """Build search URL for the specific site"""
+        pass
+    
+    @abstractmethod
+    def extract_listings_from_page(self, html_content: str, keyword: str) -> List[Dict[str, Any]]:
+        """Extract listings from HTML page - must be implemented by each scraper"""
+        pass
+    
+    def scrape_keyword(self, keyword: str, max_pages: int = 3) -> Dict[str, Any]:
+        """Scrape a single keyword across multiple pages"""
+        print(f"Starting to scrape '{keyword}' on {self.site_name}")
+        
+        total_listings = 0
+        saved_listings = 0
+        errors = 0
+        
+        for page in range(1, max_pages + 1):
+            try:
+                # Build search URL
+                search_url = self.build_search_url(keyword, page)
+                print(f"Scraping page {page}: {search_url}")
+                
+                # Fetch page
+                response = self.safe_request(search_url)
+                if not response:
+                    print(f"Failed to fetch page {page} for keyword '{keyword}'")
+                    errors += 1
+                    continue
+                
+                # Extract listings
+                listings = self.extract_listings_from_page(response.text, keyword)
+                total_listings += len(listings)
+                
+                print(f"Found {len(listings)} listings on page {page}")
+                
+                # Save each listing
+                for listing in listings:
+                    if self.save_listing(listing):
+                        saved_listings += 1
+                
+                # Check if we should continue to next page
+                if len(listings) == 0:
+                    print(f"No more listings found on page {page}, stopping")
+                    break
+                    
+            except Exception as e:
+                print(f"Error scraping page {page} for keyword '{keyword}': {e}")
+                errors += 1
+                continue
+        
+        return {
+            'keyword': keyword,
+            'site': self.site_name,
+            'total_listings_found': total_listings,
+            'saved_listings': saved_listings,
+            'errors': errors,
+            'pages_scraped': min(page, max_pages)
+        }
+    
+    def run(self, keywords: List[str]) -> Dict[str, Any]:
+        """Run scraper for multiple keywords"""
+        print(f"Starting {self.site_name} scraper with {len(keywords)} keywords")
+        
+        # Initialize URL cache at the start of the run for optimal performance
+        self.initialize_url_cache()
+        
+        results = []
+        start_time = time.time()
+        
+        for i, keyword in enumerate(keywords, 1):
+            print(f"\n--- Processing keyword {i}/{len(keywords)}: '{keyword}' ---")
+            
+            result = self.scrape_keyword(keyword)
+            results.append(result)
+            
+            # Add delay between keywords
+            if i < len(keywords):
+                delay = self.get_random_delay(3.0, 7.0)
+                print(f"Waiting {delay:.1f} seconds before next keyword...")
+                time.sleep(delay)
+        
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        # Summary
+        total_saved = sum(r['saved_listings'] for r in results)
+        total_errors = sum(r['errors'] for r in results)
+        
+        summary = {
+            'site': self.site_name,
+            'keywords_processed': len(keywords),
+            'total_listings_saved': total_saved,
+            'total_errors': total_errors,
+            'duration_seconds': duration,
+            'results': results
+        }
+        
+        print(f"\n=== {self.site_name} Scraper Summary ===")
+        print(f"Keywords processed: {len(keywords)}")
+        print(f"Total listings saved: {total_saved}")
+        print(f"Total errors: {total_errors}")
+        print(f"Duration: {duration:.1f} seconds")
+        
+        return summary 
