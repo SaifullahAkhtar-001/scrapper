@@ -587,6 +587,9 @@ const DataPage = () => {
                       <option value={12}>12 per page</option>
                       <option value={24}>24 per page</option>
                       <option value={48}>48 per page</option>
+                      <option value={100}>100 per page</option>
+                      <option value={500}>500 per page</option>
+                      <option value={1000}>1000 per page</option>
                     </select>
                   </div>
 
