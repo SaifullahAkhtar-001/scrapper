@@ -79,6 +79,28 @@ const DataPage = () => {
     }
   };
 
+  // Fetch saved listing IDs
+  useEffect(() => {
+    fetchSavedIds();
+  }, []);
+  const fetchSavedIds = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("scraped_listings")
+        .select("id")
+        .eq("saved", true);
+
+      if (error) {
+        console.error("Error fetching saved IDs:", error);
+      } else {
+        const savedIdsSet = new Set(data?.map(item => item.id) || []);
+        setSavedIds(savedIdsSet);
+      }
+    } catch (err) {
+      console.error("Failed to fetch saved IDs:", err);
+    }
+  };
+
   const fetchListings = async () => {
     console.log("Starting to fetch listings...");
     setLoading(true);
@@ -98,7 +120,24 @@ const DataPage = () => {
         query = query.eq("site", selectedSite);
       }
       if (selectedKeyword !== "all") {
-        query = query.ilike("title", `%${selectedKeyword}%`);
+        try {
+          const parsed = JSON.parse(selectedKeyword as string) as {
+            en?: string | null;
+            es?: string | null;
+          };
+          const orFilters: string[] = [];
+          if (parsed?.en) {
+            orFilters.push(`title.ilike.%${parsed.en}%`);
+          }
+          if (parsed?.es) {
+            orFilters.push(`title.ilike.%${parsed.es}%`);
+          }
+          if (orFilters.length > 0) {
+            query = query.or(orFilters.join(","));
+          }
+        } catch {
+          query = query.ilike("title", `%${selectedKeyword}%`);
+        }
       }
       if (priceRange.min) {
         query = query.gte("price", parseFloat(priceRange.min));
@@ -207,7 +246,7 @@ const DataPage = () => {
   const handleSaveListing = async (listing: ScrapedListing) => {
     try {
       setSavingId(listing.id);
-      
+
       // Update the listing in the database
       const { error: update_error } = await supabase
         .from("scraped_listings")
@@ -240,17 +279,17 @@ const DataPage = () => {
       }
 
       // Update local state
-      setListings(prevListings => 
-        prevListings.map(item => 
-          item.id === listing.id 
-            ? { ...item, saved: true, updated_at: new Date().toISOString() } 
+      setListings(prevListings =>
+        prevListings.map(item =>
+          item.id === listing.id
+            ? { ...item, saved: true, updated_at: new Date().toISOString() }
             : item
         )
       );
-      
+
       // Update saved IDs
       setSavedIds(prev => new Set([...prev, listing.id]));
-      
+
       // Show success message
       setError(null);
     } catch (e) {
@@ -368,11 +407,11 @@ const DataPage = () => {
               {availableKeywords.map((keyword) => (
                 <option
                   key={keyword.id}
-                  value={
-                    keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""
-                  }
+                  value={JSON.stringify({ en: keyword.keyword, es: keyword.spanishkeyword })}
                 >
-                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
+                  {(keyword.keyword && keyword.spanishkeyword)
+                    ? `${keyword.keyword} / ${keyword.spanishkeyword}`
+                    : (keyword.spanishkeyword || keyword.keyword || "")}
                 </option>
               ))}
             </select>
@@ -444,6 +483,15 @@ const DataPage = () => {
                             {listing.site}
                           </span>
                         </div>
+                        {/* NEW label for recent listings */}
+                        {listing.created_at &&
+                          new Date(listing.created_at) > new Date(Date.now() - 24 * 60 * 60 * 1000) && (
+                            <div className="absolute top-2 right-2">
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium font-bold">
+                                NEW
+                              </span>
+                            </div>
+                          )}
                       </div>
 
                       {/* Content */}
@@ -472,8 +520,8 @@ const DataPage = () => {
                               <Calendar className="w-3 h-3" />
                               {listing.created_at
                                 ? new Date(
-                                    listing.created_at
-                                  ).toLocaleDateString()
+                                  listing.created_at
+                                ).toLocaleDateString()
                                 : "N/A"}
                             </div>
                             <span>ID: {listing.id}</span>
@@ -503,9 +551,9 @@ const DataPage = () => {
                           <button
                             className={`p-2 rounded-lg transition-colors relative group/save ${
                               savedIds.has(listing.id)
-                                ? "bg-green-50 text-green-700"
-                                : "hover:bg-green-50 text-green-700"
-                            }`}
+                              ? "bg-green-50 text-green-700"
+                              : "hover:bg-green-50 text-green-700"
+                              }`}
                             onClick={() => handleSaveListing(listing)}
                             disabled={
                               savingId === listing.id ||
@@ -609,13 +657,12 @@ const DataPage = () => {
                           typeof page === "number" && handlePageChange(page)
                         }
                         disabled={page === "..."}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          page === currentPage
-                            ? "bg-blue-600 text-white"
-                            : page === "..."
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${page === currentPage
+                          ? "bg-blue-600 text-white"
+                          : page === "..."
                             ? "text-slate-400 cursor-default"
                             : "hover:bg-white text-slate-600"
-                        }`}
+                          }`}
                       >
                         {page}
                       </button>

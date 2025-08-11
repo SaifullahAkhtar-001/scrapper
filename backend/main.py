@@ -6,6 +6,7 @@ from services.database_service import DatabaseService
 from services.scraper_service import ScraperService
 from services.todocoleccion_service import TodocoleccionService
 from services.craigslist_service import CraigslistService
+from services.ebay_service import EbayService
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -136,15 +137,12 @@ def scrape_by_keyword():
                 results['craigslist'] = craigslist_result
                 if not craigslist_result.get('success'):
                     success = False
-                    
+
             if 'ebay' in sites:
-                # Placeholder for eBay scraper
-                ebay_result = {
-                    "success": False,
-                    "error": "eBay scraper not implemented yet"
-                }
+                ebay_result = EbayService.scrape_specific_keyword(keyword)
                 results['ebay'] = ebay_result
-                success = success and False
+                if not ebay_result.get('success'):
+                    success = False
                 
             return jsonify({
                 "success": success,
@@ -167,4 +165,4 @@ def scrape_by_keyword():
 
 if __name__ == '__main__':
     # Run the app in debug mode for development
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

@@ -105,7 +105,6 @@ class EbayScraper(BaseScraper):
                 'description': description,
                 'site': self.site_name,
                 'keyword': keyword,
-                'created_at': None  # Will be set by database
             }
             
             return listing_data
