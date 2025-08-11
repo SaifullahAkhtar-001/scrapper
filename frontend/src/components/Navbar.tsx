@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Home, Database, Play } from 'lucide-react';
+import { BookOpen, Home, Database } from 'lucide-react';
 
 const Navbar = () => {
   const location = useLocation();
