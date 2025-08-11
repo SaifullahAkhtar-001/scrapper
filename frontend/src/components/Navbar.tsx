@@ -42,12 +42,12 @@ const Navbar = () => {
           >
             <Database className="w-4 h-4" /> Cigars Data
           </Link>
-          <Link
+          {/* <Link
             to="/scrape"
             className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/scrape') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
           >
             <Play className="w-4 h-4" /> Run Scrapers
-          </Link>
+          </Link> */}
         </div>
       </div>
     </nav>
