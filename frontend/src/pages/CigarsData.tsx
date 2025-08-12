@@ -234,7 +234,7 @@ const DataPage = () => {
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
       const model = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) || "gpt-4o-mini";
       if (!apiKey) {
-        throw new Error("Missing VITE_OPENAI_API_KEY env var");
+        throw new Error("Missing OpenAI API Key");
       }
 
       const BATCH_SIZE = 100;
