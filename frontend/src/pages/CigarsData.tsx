@@ -58,6 +58,12 @@ const DataPage = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  // AI batch processing state
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiProcessed, setAiProcessed] = useState(0);
+  const [aiTotal, setAiTotal] = useState<number | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Fetch available keywords
   const fetchKeywords = async () => {
     try {
@@ -201,9 +207,194 @@ const DataPage = () => {
     }
   };
 
+  // Fetch total pending for progress display
+  const refreshAiTotal = async () => {
+    const { count } = await supabase
+      .from("scraped_listings")
+      .select("id", { count: "exact", head: true })
+      .or("ai_status.is.null,ai_status.eq.false")
+      .eq("saved", false);
+    setAiTotal(count || 0);
+  };
+
+  useEffect(() => {
+    refreshAiTotal();
+  }, []);
+
+  // AI classifier runner (chunked)
+  const runAiClassifier = async () => {
+    if (aiRunning) return;
+    setAiRunning(true);
+    setAiProcessed(0);
+    setAiError(null);
+
+    try {
+      await refreshAiTotal();
+
+      const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
+      const model = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) || "gpt-4o-mini";
+      if (!apiKey) {
+        throw new Error("Missing VITE_OPENAI_API_KEY env var");
+      }
+
+      const BATCH_SIZE = 100;
+
+      // Helper to pause between batches
+      const pause = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+      while (true) {
+        // 1) Select next batch of unprocessed rows
+        const { data: batch, error: selectError } = await supabase
+          .from("scraped_listings")
+          .select(
+            "id,title,url,price,image_url,description,site,keyword,created_at,updated_at,saved,ai_status"
+          )
+          .or("ai_status.is.null,ai_status.eq.false")
+          .eq("saved", false)
+          .order("id", { ascending: true })
+          .limit(BATCH_SIZE);
+
+        if (selectError) throw selectError;
+        if (!batch || batch.length === 0) break;
+
+        const ids = batch.map((b) => b.id);
+
+        // 2) Build Groq payload to classify
+        const titlesPayload = batch.map((b) => ({ id: b.id, title: b.title }));
+        const systemInstruction =
+          `You are a strict cigar listing classifier. You will receive a JSON object with an array of items {id, title}. Return ONLY a JSON array of objects for items that are ACTUAL SMOKEABLE CIGARS. Each object must include {id, title}.
+
+INCLUDE ONLY:
+- Individual cigars or cigar sticks
+- Cigars sold in small quantities (2-25 individual cigars)
+- Cigars with specific brand names and quantities
+
+EXCLUDE ALL:
+- Empty cigar boxes ("caja vacía", "empty box")
+- Cigar boxes without cigars ("8 CIGAR BOXES", "caja de puros" without cigar count)
+- Accessories (humidors, cutters, lighters, ashtrays)
+- Collectible items, memorabilia, dollhouse items
+- Music CDs, cassettes, or any non-tobacco products
+- Vintage advertising materials
+- Items mentioning "box lot", "mixed lot" without specific cigar quantities
+- Leather cases, pouches, or storage items
+- Any item where the primary focus is the container, not the cigars
+
+Do not include any other text in your response.`
+        const payload = {
+          model,
+          temperature: 0,
+          messages: [
+            { role: "system", content: systemInstruction },
+            {
+              role: "user",
+              content: JSON.stringify({ items: titlesPayload }),
+            },
+          ],
+        } as const;
+
+        // 3) Call Groq
+        const response = await fetch(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
+
+        if (!response.ok) {
+          const txt = await response.text();
+          throw new Error(`Groq API error: ${response.status} ${txt}`);
+        }
+
+        const json = await response.json();
+        const raw = json?.choices?.[0]?.message?.content ?? "";
+
+        // 4) Parse model JSON response robustly
+        let positives: Array<{ id: number; title: string }> = [];
+        try {
+          const start = raw.indexOf("[");
+          const end = raw.lastIndexOf("]");
+          const slice = start >= 0 && end >= 0 ? raw.substring(start, end + 1) : raw;
+          const parsed = JSON.parse(slice);
+          if (Array.isArray(parsed)) {
+            positives = parsed
+              .map((x) => ({ id: Number(x.id), title: String(x.title || "") }))
+              .filter((x) => Number.isFinite(x.id));
+          }
+        } catch (e) {
+          console.warn("Failed to parse Groq response, raw=", raw);
+          positives = [];
+        }
+
+        const positiveIds = positives.map((p) => p.id);
+
+        // 5) Upsert positives into cigar_listings (batch)
+        if (positiveIds.length > 0) {
+          const { data: sourceRows, error: srcErr } = await supabase
+            .from("scraped_listings")
+            .select(
+              "id,title,url,price,image_url,description,site,keyword,created_at,updated_at"
+            )
+            .in("id", positiveIds);
+          if (srcErr) throw srcErr;
+
+          const rowsToInsert = (sourceRows || []).map((r) => ({
+            title: r.title,
+            url: r.url,
+            price: r.price,
+            image_url: r.image_url,
+            description: r.description,
+            site: r.site,
+            keyword: r.keyword,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+            parent_id: r.id,
+          }));
+
+          if (rowsToInsert.length > 0) {
+            const { error: insErr } = await supabase
+              .from("cigar_listings")
+              .upsert(rowsToInsert, { onConflict: "url", ignoreDuplicates: true });
+            if (insErr) throw insErr;
+
+            const { error: savedErr } = await supabase
+              .from("scraped_listings")
+              .update({ saved: true })
+              .in("id", positiveIds);
+            if (savedErr) throw savedErr;
+          }
+        }
+
+        // 6) Mark processed batch ai_status = true
+        const { error: updErr } = await supabase
+          .from("scraped_listings")
+          .update({ ai_status: true })
+          .in("id", ids);
+        if (updErr) throw updErr;
+
+        setAiProcessed((prev) => prev + batch.length);
+        await pause(250); // yield UI
+      }
+
+      // Refresh counts and visible listings
+      await refreshAiTotal();
+      await fetchListings();
+    } catch (e: any) {
+      console.error(e);
+      setAiError(e?.message || "AI processing failed");
+    } finally {
+      setAiRunning(false);
+    }
+  };
+
   // Generate page numbers for pagination
   const getPageNumbers = () => {
-    const pages = [];
+    const pages = [] as Array<number | string>;
     const maxVisiblePages = 5;
 
     if (totalPages <= maxVisiblePages) {
@@ -247,17 +438,67 @@ const DataPage = () => {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
                 Scraped Listings
               </h1>
-              <p className="text-slate-600 mt-2">
-                Browse and manage your scraped data
-              </p>
+              <p className="text-slate-600 mt-2">Browse and manage your scraped data</p>
             </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-slate-800">
-                {totalCount}
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <div className="text-3xl font-bold text-slate-800">{totalCount}</div>
+                <div className="text-sm text-slate-500">Total Listings</div>
               </div>
-              <div className="text-sm text-slate-500">Total Listings</div>
+              <button
+                type="button"
+                onClick={runAiClassifier}
+                disabled={aiRunning}
+                className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${aiRunning
+                  ? "bg-slate-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+                  }`}
+                aria-label="Run AI classifier"
+                title="Classify scraped listings and push cigars"
+              >
+                <span className="inline-flex items-center gap-2">
+                  {aiRunning ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  {aiRunning ? "Processing..." : "Classify with AI"}
+                </span>
+              </button>
             </div>
           </div>
+
+          {/* AI status */}
+          {(aiRunning || aiError || (aiTotal ?? 0) > 0) && (
+            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
+              <div className="flex items-center gap-2 text-slate-700">
+                {aiError ? (
+                  <>
+                    <AlertCircle className="w-5 h-5 text-red-500" />
+                    <span className="text-red-600">{aiError}</span>
+                  </>
+                ) : (
+                  <>
+                    {aiRunning ? (
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-slate-500" />
+                    )}
+                    <span>
+                      Pending: {aiTotal ?? 0} | Processed this run: {aiProcessed}
+                    </span>
+                  </>
+                )}
+              </div>
+              {!aiRunning && (
+                <button
+                  type="button"
+                  onClick={refreshAiTotal}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Refresh pending
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Search and Filters */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -289,9 +530,7 @@ const DataPage = () => {
               {availableKeywords.map((keyword) => (
                 <option
                   key={keyword.id}
-                  value={
-                    keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""
-                  }
+                  value={keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
                 >
                   {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
                 </option>
@@ -370,10 +609,7 @@ const DataPage = () => {
                       {/* Content */}
                       <div className="p-4">
                         <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
-                          {highlightKeywordInTitle(
-                            listing.title,
-                            listing.keyword
-                          )}
+                          {highlightKeywordInTitle(listing.title, listing.keyword)}
                         </h3>
                         <div className="mb-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
@@ -392,9 +628,7 @@ const DataPage = () => {
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3 h-3" />
                               {listing.created_at
-                                ? new Date(
-                                    listing.created_at
-                                  ).toLocaleDateString()
+                                ? new Date(listing.created_at).toLocaleDateString()
                                 : "N/A"}
                             </div>
                             <span>ID: {listing.id}</span>
@@ -423,9 +657,7 @@ const DataPage = () => {
                           </a>
                           <button
                             className="p-2 rounded-lg transition-colors relative group/unsave hover:bg-red-50 text-red-700"
-                            onClick={() =>
-                              handleUnsaveListing(listing.id, listing.parent_id)
-                            }
+                            onClick={() => handleUnsaveListing(listing.id, listing.parent_id)}
                             disabled={deletingId === listing.id}
                             type="button"
                             aria-label="Unsave listing"
@@ -470,21 +702,20 @@ const DataPage = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-slate-600">
-                      Showing {(currentPage - 1) * pageSize + 1} to{" "}
-                      {Math.min(currentPage * pageSize, totalCount)} of{" "}
-                      {totalCount} results
+                      Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
                     </span>
                     <select
                       value={pageSize}
-                      onChange={(e) =>
-                        handlePageSizeChange(Number(e.target.value))
-                      }
+                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
                       className="px-3 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value={6}>6 per page</option>
                       <option value={12}>12 per page</option>
                       <option value={24}>24 per page</option>
                       <option value={48}>48 per page</option>
+                      <option value={100}>100 per page</option>
+                      <option value={500}>500 per page</option>
+                      <option value={1000}>1000 per page</option>
                     </select>
                   </div>
 
@@ -500,17 +731,14 @@ const DataPage = () => {
                     {getPageNumbers().map((page, index) => (
                       <button
                         key={index}
-                        onClick={() =>
-                          typeof page === "number" && handlePageChange(page)
-                        }
+                        onClick={() => typeof page === "number" && handlePageChange(page)}
                         disabled={page === "..."}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          page === currentPage
-                            ? "bg-blue-600 text-white"
-                            : page === "..."
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${page === currentPage
+                          ? "bg-blue-600 text-white"
+                          : page === "..."
                             ? "text-slate-400 cursor-default"
                             : "hover:bg-white text-slate-600"
-                        }`}
+                          }`}
                       >
                         {page}
                       </button>
