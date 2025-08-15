@@ -232,7 +232,7 @@ const DataPage = () => {
       await refreshAiTotal();
 
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY as string | undefined;
-      const model = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) || "gpt-4o-mini";
+      const model = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) || "gpt-5-nano";
       if (!apiKey) {
         throw new Error("Missing OpenAI API Key");
       }
@@ -261,26 +261,56 @@ const DataPage = () => {
 
         // 2) Build Groq payload to classify
         const titlesPayload = batch.map((b) => ({ id: b.id, title: b.title }));
-        const systemInstruction =
-          `You are a strict cigar listing classifier. You will receive a JSON object with an array of items {id, title}. Return ONLY a JSON array of objects for items that are ACTUAL SMOKEABLE CIGARS. Each object must include {id, title}.
+        const systemInstruction = `You are a strict cigar listing classifier. You will receive a JSON object with an array of items {id, title}. Return ONLY a JSON array of objects for items that are ACTUAL SMOKEABLE CIGARS available for purchase. Each object must include {id, title}.
 
 INCLUDE ONLY:
-- Individual cigars or cigar sticks
-- Cigars sold in small quantities (2-25 individual cigars)
-- Cigars with specific brand names and quantities
+- Individual cigars or cigar sticks with clear quantity (1-25 cigars)
+- Cigars with specific brand names AND explicit cigar quantities
+- Listings that clearly state "X cigars" or "X puros" where X is a number
+- Single cigars or small bundles/packs of cigars for smoking
 
 EXCLUDE ALL:
-- Empty cigar boxes ("caja vacía", "empty box")
-- Cigar boxes without cigars ("8 CIGAR BOXES", "caja de puros" without cigar count)
-- Accessories (humidors, cutters, lighters, ashtrays)
-- Collectible items, memorabilia, dollhouse items
-- Music CDs, cassettes, or any non-tobacco products
-- Vintage advertising materials
-- Items mentioning "box lot", "mixed lot" without specific cigar quantities
-- Leather cases, pouches, or storage items
-- Any item where the primary focus is the container, not the cigars
 
-Do not include any other text in your response.`
+CONTAINERS & EMPTY ITEMS:
+- Empty cigar boxes ("caja vacía", "empty box", "caja sin puros", "box only")
+- Cigar boxes without cigars ("8 CIGAR BOXES", "caja de puros" without cigar count)
+- Tins without cigars ("cigar tin", "lata", "tin box", "tobacco tin")
+- Any listing mentioning "empty", "vacío/a", "sin contenido"
+
+ACCESSORIES & NON-SMOKING ITEMS:
+- Humidors, cutters, lighters, ashtrays, hygrometers
+- Leather cases, pouches, travel cases, storage containers
+- Cigar stands, holders, displays
+- Collectibles, memorabilia, vintage items
+- Dollhouse miniatures or toys
+
+MEDIA & PROMOTIONAL ITEMS:
+- Pictures, photographs, prints, artwork of cigars
+- Vintage advertising materials, posters, signs
+- Music CDs, cassettes, DVDs
+- Books, magazines, catalogs
+- Labels, bands, wrappers (without cigars)
+
+BULK/UNCLEAR QUANTITIES:
+- "Box lot", "mixed lot", "estate lot" without specific cigar count
+- "Wholesale lot", "bulk items"
+- Items where quantity is unclear or focused on containers
+- "Various", "assorted", "mixed" without stating actual cigar numbers
+
+SPANISH EXCLUSIONS:
+- "Solo caja", "únicamente caja", "caja coleccionable"
+- "Lata vacía", "tin vacío"
+- "Accesorios", "colección", "memorabilia"
+- "Imagen", "foto", "cuadro", "poster"
+- "Vintage", "antiguo", "coleccionable"
+
+QUALITY CHECKS:
+- Must explicitly mention smokeable cigars/puros with quantity
+- Cannot be primarily about the packaging/container
+- Must be intended for actual smoking, not display/collection
+- Avoid listings where the value is in the container, not contents
+
+Return ONLY valid JSON array. No explanatory text.`
         const payload = {
           model,
           temperature: 0,
