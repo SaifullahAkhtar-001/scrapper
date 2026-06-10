@@ -310,7 +310,6 @@ QUALITY CHECKS:
 Return ONLY valid JSON array. No explanatory text.`
         const payload = {
           model,
-          temperature: 0,
           messages: [
             { role: "system", content: systemInstruction },
             {
