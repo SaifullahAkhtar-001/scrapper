@@ -10,17 +10,19 @@ import ScrapeRunnerPage from './pages/ScrapeRunnerPage';
 function App() {
   return (
     <Router>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/keywords" element={<KeywordsPage />} />
-        <Route path="/data" element={<DataPage />} />
-        <Route path="/cigarsdata" element={<CigarsData />} />
-        <Route path="/stopwords" element={<StopwordsPage />} />
-        <Route path="/scrape" element={<ScrapeRunnerPage />} />
-      </Routes>
+      <div className="min-h-screen bg-zinc-50">
+        <Navbar />
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/keywords" element={<KeywordsPage />} />
+          <Route path="/data" element={<DataPage />} />
+          <Route path="/cigarsdata" element={<CigarsData />} />
+          <Route path="/stopwords" element={<StopwordsPage />} />
+          <Route path="/scrape" element={<ScrapeRunnerPage />} />
+        </Routes>
+      </div>
     </Router>
   );
 }
 
-export default App
+export default App;

@@ -2,12 +2,18 @@ import { useEffect, useState } from "react";
 import {
   Play,
   Search,
-  AlertCircle,
-  Check,
   RefreshCw,
   ChevronDown,
+  AlertCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { PageLayout } from "../components/ui/PageLayout";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Card } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Alert } from "../components/ui/Alert";
 
 type ScrapeSiteResult = {
   success: boolean;
@@ -91,7 +97,6 @@ const ScrapeRunnerPage = () => {
       setResult(data);
       if (resp.ok && data.success) {
         setSuccess("Scrape finished successfully");
-        // Redirect to data page after a short delay
         setTimeout(() => {
           navigate("/data");
         }, 1500);
@@ -109,171 +114,125 @@ const ScrapeRunnerPage = () => {
     if (!siteResult) return null;
     const ok = !!siteResult.success;
     return (
-      <div className="bg-white/80 rounded-xl border border-slate-200 p-5 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-slate-800">{title}</h3>
-          <span
-            className={`px-2 py-1 rounded-full text-xs font-medium ${
-              ok ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-            }`}
-          >
+      <Card key={title}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
+          <Badge variant={ok ? "success" : "error"}>
             {ok ? "Success" : "Error"}
-          </span>
+          </Badge>
         </div>
         {ok ? (
-          <div className="grid grid-cols-2 gap-3 text-sm text-slate-700">
-            <div>
-              <div className="text-slate-500">Listings Found</div>
-              <div className="font-medium">
-                {siteResult.total_listings_found ?? "-"}
+          <div className="grid grid-cols-2 gap-4">
+            {[
+              { label: "Listings Found", value: siteResult.total_listings_found ?? "-" },
+              { label: "Saved Listings", value: siteResult.saved_listings ?? "-" },
+              { label: "Pages Scraped", value: siteResult.pages_scraped ?? "-" },
+              { label: "Errors", value: siteResult.errors ?? 0 },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <div className="text-xs text-zinc-500 mb-0.5">{label}</div>
+                <div className="text-sm font-medium text-zinc-900">{value}</div>
               </div>
-            </div>
-            <div>
-              <div className="text-slate-500">Saved Listings</div>
-              <div className="font-medium">
-                {siteResult.saved_listings ?? "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-500">Pages Scraped</div>
-              <div className="font-medium">
-                {siteResult.pages_scraped ?? "-"}
-              </div>
-            </div>
-            <div>
-              <div className="text-slate-500">Errors</div>
-              <div className="font-medium">{siteResult.errors ?? 0}</div>
-            </div>
+            ))}
           </div>
         ) : (
-          <div className="flex items-center text-sm text-red-600">
-            <AlertCircle className="w-4 h-4 mr-1" />
+          <div className="flex items-center gap-2 text-sm text-red-600">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             {siteResult.error || "Unknown error"}
           </div>
         )}
-      </div>
+      </Card>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                Run Scrapers
-              </h1>
-              <p className="text-slate-600 mt-2">
-                Run scrapers for specific websites with a keyword
-              </p>
-            </div>
-          </div>
+    <PageLayout>
+      <PageHeader
+        title="Run Scrapers"
+        description="Run scrapers for specific websites with a keyword"
+      />
 
-          <div className="space-y-4">
-            <div className="flex gap-3 items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Enter keyword..."
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  disabled={loading}
-                  onKeyDown={(e) => e.key === "Enter" && handleRun()}
-                />
-              </div>
-              <button
-                onClick={handleRun}
+      <Card className="mb-6">
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Input
+                icon={<Search className="w-4 h-4" />}
+                type="text"
+                placeholder="Enter keyword..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
                 disabled={loading}
-                className={`px-6 py-3 rounded-xl text-white font-medium shadow-lg bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center gap-2 ${
-                  loading
-                    ? "opacity-60 cursor-not-allowed"
-                    : "hover:from-blue-700 hover:to-indigo-700"
-                }`}
-              >
-                {loading ? (
-                  <RefreshCw className="w-5 h-5 animate-spin" />
-                ) : (
-                  <Play className="w-5 h-5" />
-                )}
-                {loading ? "Running..." : "Run Scrapers"}
-              </button>
+                onKeyDown={(e) => e.key === "Enter" && handleRun()}
+              />
             </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors w-full justify-between"
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              >
-                <span>Select Websites</span>
-                <ChevronDown
-                  className={`w-4 h-4 transition-transform ${
-                    isDropdownOpen ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-
-              {isDropdownOpen && (
-                <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg border border-slate-200">
-                  <div className="p-2 space-y-1">
-                    {Object.entries(selectedSites).map(([site, isSelected]) => (
-                      <label
-                        key={site}
-                        className="flex items-center p-2 rounded hover:bg-slate-50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {
-                            setSelectedSites((prev) => ({
-                              ...prev,
-                              [site]: !prev[site],
-                            }));
-                          }}
-                          className="h-4 w-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 mr-2"
-                        />
-                        <span className="capitalize">{site}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+            <Button onClick={handleRun} disabled={loading} size="lg">
+              {loading ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
               )}
-            </div>
+              {loading ? "Running..." : "Run Scrapers"}
+            </Button>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r-xl">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-                <p className="text-red-700">{error}</p>
-              </div>
-            </div>
-          )}
-          {success && (
-            <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded-r-xl">
-              <div className="flex items-center">
-                <Check className="w-5 h-5 text-green-400 mr-2" />
-                <p className="text-green-700">{success}</p>
-              </div>
-            </div>
-          )}
+          <div className="relative">
+            <button
+              type="button"
+              className="flex items-center justify-between w-full px-3 py-2 text-sm bg-white border border-zinc-300 rounded-md text-zinc-700 hover:bg-zinc-50 transition-colors"
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            >
+              <span>Select Websites</span>
+              <ChevronDown
+                className={`w-4 h-4 text-zinc-400 transition-transform ${
+                  isDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
-          {result && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {result.results?.todocoleccion &&
-                renderSiteCard("Todocoleccion", result.results.todocoleccion)}
-              {result.results?.craigslist &&
-                renderSiteCard("Craigslist", result.results.craigslist)}
-              {result.results?.ebay &&
-                renderSiteCard("eBay", result.results.ebay)}
-            </div>
-          )}
+            {isDropdownOpen && (
+              <div className="absolute z-10 mt-1 w-full bg-white rounded-md shadow-lg border border-zinc-200">
+                <div className="p-1">
+                  {Object.entries(selectedSites).map(([site, isSelected]) => (
+                    <label
+                      key={site}
+                      className="flex items-center px-3 py-2 rounded hover:bg-zinc-50 cursor-pointer text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedSites((prev) => ({
+                            ...prev,
+                            [site]: !prev[site],
+                          }));
+                        }}
+                        className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 mr-2.5"
+                      />
+                      <span className="capitalize text-zinc-700">{site}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+      </Card>
+
+      {error && <div className="mb-4"><Alert variant="error">{error}</Alert></div>}
+      {success && <div className="mb-4"><Alert variant="success">{success}</Alert></div>}
+
+      {result && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {result.results?.todocoleccion &&
+            renderSiteCard("Todocoleccion", result.results.todocoleccion)}
+          {result.results?.craigslist &&
+            renderSiteCard("Craigslist", result.results.craigslist)}
+          {result.results?.ebay &&
+            renderSiteCard("eBay", result.results.ebay)}
+        </div>
+      )}
+    </PageLayout>
   );
 };
 

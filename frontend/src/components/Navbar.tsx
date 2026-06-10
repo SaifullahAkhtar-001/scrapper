@@ -1,57 +1,62 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BookOpen, Home, Database } from 'lucide-react';
+import {
+  Home,
+  Tag,
+  Ban,
+  Database,
+  Package,
+} from 'lucide-react';
+
+const navItems = [
+  { to: '/', label: 'Home', icon: Home, exact: true },
+  { to: '/keywords', label: 'Keywords', icon: Tag },
+  { to: '/stopwords', label: 'Stopwords', icon: Ban },
+  { to: '/data', label: 'All Data', icon: Database },
+  { to: '/cigarsdata', label: 'Cigars', icon: Package },
+];
 
 const Navbar = () => {
   const location = useLocation();
+
+  const isActive = (to: string, exact?: boolean) =>
+    exact ? location.pathname === to : location.pathname.startsWith(to);
+
   return (
-    <nav className="w-full bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-100">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent select-none">
-            Keyword Manager
-          </span>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            to="/"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname === '/' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <Home className="w-4 h-4" /> Home
+    <header className="sticky top-0 z-50 w-full bg-white border-b border-zinc-200">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="flex h-14 items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center justify-center w-7 h-7 rounded-md bg-zinc-900">
+              <Tag className="w-3.5 h-3.5 text-white" />
+            </div>
+            <span className="text-sm font-semibold text-zinc-900 tracking-tight">
+              Scraper
+            </span>
           </Link>
-          <Link
-            to="/keywords"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/keywords') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <BookOpen className="w-4 h-4" /> Keywords
-          </Link>
-          <Link
-            to="/stopwords"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/stopwords') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <Database className="w-4 h-4" /> Stopwords
-          </Link>
-          <Link
-            to="/data"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/data') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <Database className="w-4 h-4" /> All Data
-          </Link>
-          <Link
-            to="/cigarsdata"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/cigarsdata') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <Database className="w-4 h-4" /> Cigars Data
-          </Link>
-          {/* <Link
-            to="/scrape"
-            className={`flex items-center gap-1 px-4 py-2 rounded-lg font-medium transition-colors ${location.pathname.startsWith('/scrape') ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-blue-50'}`}
-          >
-            <Play className="w-4 h-4" /> Run Scrapers
-          </Link> */}
+
+          <nav className="flex items-center gap-1">
+            {navItems.map(({ to, label, icon: Icon, exact }) => {
+              const active = isActive(to, exact);
+              return (
+                <Link
+                  key={to}
+                  to={to}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-zinc-100 text-zinc-900'
+                      : 'text-zinc-500 hover:text-zinc-900 hover:bg-zinc-50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="hidden sm:inline">{label}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </div>
       </div>
-    </nav>
+    </header>
   );
 };
 
-export default Navbar; 
+export default Navbar;

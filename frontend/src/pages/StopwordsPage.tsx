@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Edit2, Trash2, Save, X, Check, AlertCircle, RefreshCw, Globe } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Save, X, Globe } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
+import { PageLayout } from '../components/ui/PageLayout';
+import { PageHeader } from '../components/ui/PageHeader';
+import { Card } from '../components/ui/Card';
+import { Input } from '../components/ui/Input';
+import { Button } from '../components/ui/Button';
+import { Badge } from '../components/ui/Badge';
+import { Alert } from '../components/ui/Alert';
+import { EmptyState } from '../components/ui/EmptyState';
+import { LoadingState } from '../components/ui/LoadingState';
 
 export interface Stopword {
   id: number;
@@ -27,9 +36,7 @@ const StopwordsPage = () => {
   const [editStopword, setEditStopword] = useState<Omit<Stopword, 'id' | 'created_at' | 'updated_at'>>({ ...emptyStopword });
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  // const [syncLoading, setSyncLoading] = useState(false);
 
-  // Clear messages after 3 seconds
   useEffect(() => {
     if (error || success) {
       const timer = setTimeout(() => {
@@ -40,7 +47,6 @@ const StopwordsPage = () => {
     }
   }, [error, success]);
 
-  // Fetch stopwords
   const fetchStopwords = async () => {
     setLoading(true);
     setError(null);
@@ -61,13 +67,11 @@ const StopwordsPage = () => {
     fetchStopwords();
   }, []);
 
-// Filter stopwords based on search
-const filteredStopwords = stopwords.filter(s => 
-  s.stopword.toLowerCase().includes(searchQuery.toLowerCase()) ||
-  (s.spanishkeyword || '').toLowerCase().includes(searchQuery.toLowerCase())
-);
+  const filteredStopwords = stopwords.filter(s =>
+    s.stopword.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (s.spanishkeyword || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  // Add stopword
   const handleAdd = async (e: React.MouseEvent) => {
     e.preventDefault();
     setError(null);
@@ -89,7 +93,6 @@ const filteredStopwords = stopwords.filter(s =>
     }
   };
 
-  // Delete stopword
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this stopword?')) return;
     setError(null);
@@ -105,7 +108,6 @@ const filteredStopwords = stopwords.filter(s =>
     }
   };
 
-  // Start editing
   const startEdit = (stopword: Stopword) => {
     setEditingId(stopword.id);
     setEditStopword({
@@ -115,13 +117,11 @@ const filteredStopwords = stopwords.filter(s =>
     });
   };
 
-  // Cancel editing
   const cancelEdit = () => {
     setEditingId(null);
     setEditStopword({ ...emptyStopword });
   };
 
-  // Save edit
   const handleEditSave = async (id: number) => {
     setError(null);
     if (!editStopword.stopword.trim()) {
@@ -145,277 +145,177 @@ const filteredStopwords = stopwords.filter(s =>
     }
   };
 
-  // Trigger push-cigar-listings API
-  // const handleSyncCigarListings = async () => {
-  //   setSyncLoading(true);
-  //   setError(null);
-  //   setSuccess(null);
-  //   try {
-  //     const resp = await fetch('http://127.0.0.1:5001/api/push-cigar-listings', { method: 'POST' });
-  //     const data = await resp.json();
-  //     if (resp.ok && data.success) {
-  //       setSuccess('Cigar listings synced successfully!');
-  //     } else {
-  //       setError(data.error || 'Failed to sync cigar listings');
-  //     }
-  //   } catch (err) {
-  //     setError('Failed to sync cigar listings');
-  //   }
-  //   setSyncLoading(false);
-  // };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                Stopwords Manager
-              </h1>
-              <p className="text-slate-600 mt-2">Manage your stopwords for filtering listings</p>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-slate-800">{stopwords.length}</div>
-              <div className="text-sm text-slate-500">Total Stopwords</div>
-            </div>
-          </div>
+    <PageLayout>
+      <PageHeader
+        title="Stopwords"
+        description="Manage stopwords for filtering listings"
+        stat={{ value: stopwords.length, label: 'Total' }}
+      />
 
-          {/* Search, Add, and Sync Bar */}
-          <div className="flex gap-4 items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search stopwords..."
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 font-medium shadow-lg hover:shadow-xl"
-            >
-              <Plus className="w-5 h-5" />
-              Add Stopword
-            </button>
-            {/* <button
-              onClick={handleSyncCigarListings}
-              disabled={syncLoading}
-              className={`bg-gradient-to-r from-green-600 to-blue-600 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-medium shadow-lg hover:shadow-xl transition-all duration-200 ${syncLoading ? 'opacity-60 cursor-not-allowed' : 'hover:from-green-700 hover:to-blue-700'}`}
-            >
-              <UploadCloud className="w-5 h-5" />
-              {syncLoading ? 'Syncing...' : 'Sync Cigar Listings'}
-            </button> */}
-          </div>
+      <div className="flex gap-3 mb-6">
+        <div className="flex-1">
+          <Input
+            icon={<Search className="w-4 h-4" />}
+            type="text"
+            placeholder="Search stopwords..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
+        <Button onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="w-4 h-4" />
+          Add Stopword
+        </Button>
+      </div>
 
-        {/* Messages */}
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r-xl">
-            <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-              <p className="text-red-700">{error}</p>
-            </div>
-          </div>
-        )}
-        {success && (
-          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6 rounded-r-xl">
-            <div className="flex items-center">
-              <Check className="w-5 h-5 text-green-400 mr-2" />
-              <p className="text-green-700">{success}</p>
-            </div>
-          </div>
-        )}
+      {error && <div className="mb-4"><Alert variant="error">{error}</Alert></div>}
+      {success && <div className="mb-4"><Alert variant="success">{success}</Alert></div>}
 
-        {/* Add Form */}
-        {showAddForm && (
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6 mb-8">
-            <h3 className="text-xl font-semibold text-slate-800 mb-4">Add New Stopword</h3>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      English Stopword *
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      value={newStopword.stopword}
-                      onChange={e => setNewStopword({ ...newStopword, stopword: e.target.value })}
-                      placeholder="Enter stopword..."
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Spanish Translation
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                      value={newStopword.spanishkeyword || ''}
-                      onChange={e => setNewStopword({ ...newStopword, spanishkeyword: e.target.value })}
-                      placeholder="Enter Spanish translation..."
-                    />
-                  </div>
-                </div>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={!!newStopword.is_active}
-                    onChange={e => setNewStopword({ ...newStopword, is_active: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                  Active stopword
+      {showAddForm && (
+        <Card className="mb-6">
+          <h3 className="text-sm font-semibold text-zinc-900 mb-4">Add New Stopword</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">
+                  English Stopword <span className="text-red-500">*</span>
                 </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAddForm(false)}
-                    className="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleAdd(e);
-                    }}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-200 font-medium"
-                  >
-                    Add Stopword
-                  </button>
-                </div>
+                <Input
+                  type="text"
+                  value={newStopword.stopword}
+                  onChange={e => setNewStopword({ ...newStopword, stopword: e.target.value })}
+                  placeholder="Enter stopword..."
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-zinc-700 mb-1.5">
+                  Spanish Translation
+                </label>
+                <Input
+                  type="text"
+                  value={newStopword.spanishkeyword || ''}
+                  onChange={e => setNewStopword({ ...newStopword, spanishkeyword: e.target.value })}
+                  placeholder="Enter Spanish translation..."
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
+              <label className="flex items-center gap-2 text-sm text-zinc-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!newStopword.is_active}
+                  onChange={e => setNewStopword({ ...newStopword, is_active: e.target.checked })}
+                  className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                Active stopword
+              </label>
+              <div className="flex gap-2">
+                <Button variant="ghost" type="button" onClick={() => setShowAddForm(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={(e) => { e.preventDefault(); handleAdd(e); }}>
+                  Add Stopword
+                </Button>
               </div>
             </div>
           </div>
-        )}
+        </Card>
+      )}
 
-        {/* Stopwords Grid */}
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-            </div>
-          ) : filteredStopwords.length === 0 ? (
-            <div className="text-center py-16">
-              <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-medium text-slate-600 mb-2">
-                {searchQuery ? 'No matching stopwords' : 'No stopwords yet'}
-              </h3>
-              <p className="text-slate-500">
-                {searchQuery ? 'Try adjusting your search terms' : 'Add your first stopword to get started'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 p-6">
-              {filteredStopwords.map(stopword => (
-                <div
-                  key={stopword.id}
-                  className="bg-white/70 backdrop-blur-sm rounded-xl border border-slate-200/50 p-6 hover:shadow-lg transition-all duration-200"
-                >
-                  {editingId === stopword.id ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-2">English</label>
+      <Card padding={false}>
+        {loading ? (
+          <LoadingState />
+        ) : filteredStopwords.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title={searchQuery ? 'No matching stopwords' : 'No stopwords yet'}
+            description={searchQuery ? 'Try adjusting your search terms' : 'Add your first stopword to get started'}
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-px bg-zinc-200">
+            {filteredStopwords.map(stopword => (
+              <div key={stopword.id} className="bg-white p-5">
+                {editingId === stopword.id ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">English</label>
+                      <Input
+                        type="text"
+                        value={editStopword.stopword}
+                        onChange={e => setEditStopword({ ...editStopword, stopword: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-500 mb-1">Spanish</label>
+                      <Input
+                        type="text"
+                        value={editStopword.spanishkeyword || ''}
+                        onChange={e => setEditStopword({ ...editStopword, spanishkeyword: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
                         <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                          value={editStopword.stopword}
-                          onChange={e => setEditStopword({ ...editStopword, stopword: e.target.value })}
-                          required
+                          type="checkbox"
+                          checked={!!editStopword.is_active}
+                          onChange={e => setEditStopword({ ...editStopword, is_active: e.target.checked })}
+                          className="w-3.5 h-3.5 rounded border-zinc-300"
                         />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-2">Spanish</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-sm"
-                          value={editStopword.spanishkeyword || ''}
-                          onChange={e => setEditStopword({ ...editStopword, spanishkeyword: e.target.value })}
-                        />
-                      </div>
-                  <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={!!editStopword.is_active}
-                            onChange={e => setEditStopword({ ...editStopword, is_active: e.target.checked })}
-                            className="w-3 h-3 text-blue-600 rounded"
-                          />
-                          Active
-                        </label>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEditSave(stopword.id)}
-                            className="p-1.5 bg-green-100 text-green-600 hover:bg-green-200 rounded-lg transition-colors"
-                          >
-                            <Save className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={cancelEdit}
-                            className="p-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
+                        Active
+                      </label>
+                      <div className="flex gap-1">
+                        <Button size="sm" onClick={() => handleEditSave(stopword.id)}>
+                          <Save className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={cancelEdit}>
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                      <h3 className="font-semibold text-slate-800 text-lg leading-tight">{stopword.stopword}</h3>
-                      {stopword.spanishkeyword && (
-                        <p className="text-slate-600 text-sm mt-1 flex items-center gap-1">
-                          <Globe className="w-3 h-3" />
-                          {stopword.spanishkeyword}
-                        </p>
-                      )}
-                        </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          stopword.is_active 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {stopword.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-4">
-                        <span>ID: {stopword.id}</span>
-                        {stopword.created_at && (
-                          <span>{new Date(stopword.created_at).toLocaleDateString()}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-zinc-900 truncate">{stopword.stopword}</h3>
+                        {stopword.spanishkeyword && (
+                          <p className="text-sm text-zinc-500 mt-0.5 flex items-center gap-1">
+                            <Globe className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{stopword.spanishkeyword}</span>
+                          </p>
                         )}
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => startEdit(stopword)}
-                          className="flex-1 flex items-center justify-center gap-1 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors text-sm font-medium"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(stopword.id)}
-                          className="flex-1 flex items-center justify-center gap-1 py-2 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition-colors text-sm font-medium"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+                      <Badge variant={stopword.is_active ? 'success' : 'default'}>
+                        {stopword.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-zinc-400 mb-4">
+                      <span>ID {stopword.id}</span>
+                      {stopword.created_at && (
+                        <span>{new Date(stopword.created_at).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="secondary" size="sm" className="flex-1" onClick={() => startEdit(stopword)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Edit
+                      </Button>
+                      <Button variant="danger" size="sm" className="flex-1" onClick={() => handleDelete(stopword.id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </PageLayout>
   );
 };
 

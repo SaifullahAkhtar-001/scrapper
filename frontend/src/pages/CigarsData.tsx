@@ -10,11 +10,21 @@ import {
   Image as ImageIcon,
   Copy,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Trash2,
+  Sparkles,
 } from "lucide-react";
 import { supabase } from "../components/SupabaseClient";
+import { PageLayout } from "../components/ui/PageLayout";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Card } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
+import { Select } from "../components/ui/Select";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Alert } from "../components/ui/Alert";
+import { EmptyState } from "../components/ui/EmptyState";
+import { LoadingState } from "../components/ui/LoadingState";
+import { Pagination } from "../components/ui/Pagination";
 
 export interface ScrapedListing {
   id: number;
@@ -52,19 +62,16 @@ const DataPage = () => {
   const [availableKeywords, setAvailableKeywords] = useState<Keyword[]>([]);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // AI batch processing state
   const [aiRunning, setAiRunning] = useState(false);
   const [aiProcessed, setAiProcessed] = useState(0);
   const [aiTotal, setAiTotal] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  // Fetch available keywords
   const fetchKeywords = async () => {
     try {
       const { data, error } = await supabase
@@ -87,12 +94,10 @@ const DataPage = () => {
     setLoading(true);
     setError(null);
     try {
-      // Build query
       let query = supabase
         .from("cigar_listings")
         .select("*", { count: "exact" });
 
-      // Apply filters
       if (searchQuery) {
         query = query.ilike("title", `%${searchQuery}%`);
       }
@@ -109,7 +114,6 @@ const DataPage = () => {
         query = query.lte("price", parseFloat(priceRange.max));
       }
 
-      // Apply sorting
       if (sortBy === "newest") {
         query = query.order("created_at", { ascending: false });
       } else if (sortBy === "oldest") {
@@ -120,7 +124,6 @@ const DataPage = () => {
         query = query.order("price", { ascending: true });
       }
 
-      // Apply pagination
       const from = (currentPage - 1) * pageSize;
       const to = from + pageSize - 1;
       query = query.range(from, to);
@@ -155,7 +158,6 @@ const DataPage = () => {
     sortBy,
   ]);
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery, selectedSite, selectedKeyword, priceRange, sortBy]);
@@ -176,7 +178,7 @@ const DataPage = () => {
     const parts = title.split(regex);
     return parts.map((part, idx) =>
       part.toLowerCase() === keyword.toLowerCase() ? (
-        <mark key={idx} className="bg-yellow-200 rounded px-1">
+        <mark key={idx} className="bg-amber-100 text-amber-900 rounded px-0.5">
           {part}
         </mark>
       ) : (
@@ -207,7 +209,6 @@ const DataPage = () => {
     }
   };
 
-  // Fetch total pending for progress display
   const refreshAiTotal = async () => {
     const { count } = await supabase
       .from("scraped_listings")
@@ -221,7 +222,6 @@ const DataPage = () => {
     refreshAiTotal();
   }, []);
 
-  // AI classifier runner (chunked)
   const runAiClassifier = async () => {
     if (aiRunning) return;
     setAiRunning(true);
@@ -239,11 +239,9 @@ const DataPage = () => {
 
       const BATCH_SIZE = 100;
 
-      // Helper to pause between batches
       const pause = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
       while (true) {
-        // 1) Select next batch of unprocessed rows
         const { data: batch, error: selectError } = await supabase
           .from("scraped_listings")
           .select(
@@ -259,7 +257,6 @@ const DataPage = () => {
 
         const ids = batch.map((b) => b.id);
 
-        // 2) Build Groq payload to classify
         const titlesPayload = batch.map((b) => ({ id: b.id, title: b.title }));
         const systemInstruction = `You are a strict cigar listing classifier. You will receive a JSON object with an array of items {id, title}. Return ONLY a JSON array of objects for items that are ACTUAL SMOKEABLE CIGARS available for purchase. Each object must include {id, title}.
 
@@ -323,7 +320,6 @@ Return ONLY valid JSON array. No explanatory text.`
           ],
         } as const;
 
-        // 3) Call Groq
         const response = await fetch(
           "https://api.openai.com/v1/chat/completions",
           {
@@ -344,7 +340,6 @@ Return ONLY valid JSON array. No explanatory text.`
         const json = await response.json();
         const raw = json?.choices?.[0]?.message?.content ?? "";
 
-        // 4) Parse model JSON response robustly
         let positives: Array<{ id: number; title: string }> = [];
         try {
           const start = raw.indexOf("[");
@@ -363,7 +358,6 @@ Return ONLY valid JSON array. No explanatory text.`
 
         const positiveIds = positives.map((p) => p.id);
 
-        // 5) Upsert positives into cigar_listings (batch)
         if (positiveIds.length > 0) {
           const { data: sourceRows, error: srcErr } = await supabase
             .from("scraped_listings")
@@ -400,7 +394,6 @@ Return ONLY valid JSON array. No explanatory text.`
           }
         }
 
-        // 6) Mark processed batch ai_status = true
         const { error: updErr } = await supabase
           .from("scraped_listings")
           .update({ ai_status: true })
@@ -408,10 +401,9 @@ Return ONLY valid JSON array. No explanatory text.`
         if (updErr) throw updErr;
 
         setAiProcessed((prev) => prev + batch.length);
-        await pause(250); // yield UI
+        await pause(250);
       }
 
-      // Refresh counts and visible listings
       await refreshAiTotal();
       await fetchListings();
     } catch (e: any) {
@@ -422,373 +414,231 @@ Return ONLY valid JSON array. No explanatory text.`
     }
   };
 
-  // Generate page numbers for pagination
-  const getPageNumbers = () => {
-    const pages = [] as Array<number | string>;
-    const maxVisiblePages = 5;
-
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      if (currentPage <= 3) {
-        for (let i = 1; i <= 4; i++) {
-          pages.push(i);
-        }
-        pages.push("...");
-        pages.push(totalPages);
-      } else if (currentPage >= totalPages - 2) {
-        pages.push(1);
-        pages.push("...");
-        for (let i = totalPages - 3; i <= totalPages; i++) {
-          pages.push(i);
-        }
-      } else {
-        pages.push(1);
-        pages.push("...");
-        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
-          pages.push(i);
-        }
-        pages.push("...");
-        pages.push(totalPages);
-      }
-    }
-
-    return pages;
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-8 mb-8">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-                Scraped Listings
-              </h1>
-              <p className="text-slate-600 mt-2">Browse and manage your scraped data</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <div className="text-3xl font-bold text-slate-800">{totalCount}</div>
-                <div className="text-sm text-slate-500">Total Listings</div>
-              </div>
-              <button
-                type="button"
-                onClick={runAiClassifier}
-                disabled={aiRunning}
-                className={`px-4 py-2 rounded-lg font-medium text-white transition-all ${aiRunning
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700"
-                  }`}
-                aria-label="Run AI classifier"
-                title="Classify scraped listings and push cigars"
-              >
-                <span className="inline-flex items-center gap-2">
-                  {aiRunning ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : null}
-                  {aiRunning ? "Processing..." : "Classify with AI"}
-                </span>
-              </button>
-            </div>
-          </div>
+    <PageLayout wide>
+      <PageHeader
+        title="Cigar Listings"
+        description="Curated cigar listings from scraped data"
+        stat={{ value: totalCount, label: "Total" }}
+        actions={
+          <Button
+            onClick={runAiClassifier}
+            disabled={aiRunning}
+            variant="secondary"
+          >
+            {aiRunning ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {aiRunning ? "Processing..." : "Classify with AI"}
+          </Button>
+        }
+      />
 
-          {/* AI status */}
-          {(aiRunning || aiError || (aiTotal ?? 0) > 0) && (
-            <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-2 text-slate-700">
-                {aiError ? (
-                  <>
-                    <AlertCircle className="w-5 h-5 text-red-500" />
-                    <span className="text-red-600">{aiError}</span>
-                  </>
-                ) : (
-                  <>
-                    {aiRunning ? (
-                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                    ) : (
-                      <AlertCircle className="w-4 h-4 text-slate-500" />
-                    )}
-                    <span>
-                      Pending: {aiTotal ?? 0} | Processed this run: {aiProcessed}
-                    </span>
-                  </>
-                )}
-              </div>
-              {!aiRunning && (
-                <button
-                  type="button"
-                  onClick={refreshAiTotal}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Refresh pending
-                </button>
+      {(aiRunning || aiError || (aiTotal ?? 0) > 0) && (
+        <Card className="mb-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-zinc-600">
+              {aiError ? (
+                <>
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <span className="text-red-600">{aiError}</span>
+                </>
+              ) : (
+                <>
+                  {aiRunning && <RefreshCw className="w-4 h-4 animate-spin text-zinc-400" />}
+                  <span>
+                    Pending: {aiTotal ?? 0} | Processed this run: {aiProcessed}
+                  </span>
+                </>
               )}
             </div>
-          )}
-
-          {/* Search and Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search listings..."
-                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <select
-              value={selectedSite}
-              onChange={(e) => setSelectedSite(e.target.value)}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            >
-              <option value="all">All Sites</option>
-              <option value="ebay">eBay</option>
-              <option value="todocoleccion">TodoColeccion</option>
-            </select>
-            <select
-              value={selectedKeyword}
-              onChange={(e) => setSelectedKeyword(e.target.value)}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            >
-              <option value="all">All Keywords</option>
-              {availableKeywords.map((keyword) => (
-                <option
-                  key={keyword.id}
-                  value={keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
-                >
-                  {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-            >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="price-low">Price: Low to High</option>
-            </select>
+            {!aiRunning && (
+              <button
+                type="button"
+                onClick={refreshAiTotal}
+                className="text-sm text-zinc-600 hover:text-zinc-900 underline underline-offset-2"
+              >
+                Refresh pending
+              </button>
+            )}
           </div>
+        </Card>
+      )}
+
+      <Card className="mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Input
+            icon={<Search className="w-4 h-4" />}
+            type="text"
+            placeholder="Search listings..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Select
+            value={selectedSite}
+            onChange={(e) => setSelectedSite(e.target.value)}
+          >
+            <option value="all">All Sites</option>
+            <option value="ebay">eBay</option>
+            <option value="todocoleccion">TodoColeccion</option>
+          </Select>
+          <Select
+            value={selectedKeyword}
+            onChange={(e) => setSelectedKeyword(e.target.value)}
+          >
+            <option value="all">All Keywords</option>
+            {availableKeywords.map((keyword) => (
+              <option
+                key={keyword.id}
+                value={keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
+              >
+                {keyword.spanishkeyword ? `${keyword.spanishkeyword}` : ""}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="price-high">Price: High to Low</option>
+            <option value="price-low">Price: Low to High</option>
+          </Select>
         </div>
+      </Card>
 
-        {/* Messages */}
-        {error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6 rounded-r-xl">
-            <div className="flex items-center">
-              <AlertCircle className="w-5 h-5 text-red-400 mr-2" />
-              <p className="text-red-700">{error}</p>
-            </div>
-          </div>
-        )}
+      {error && <div className="mb-4"><Alert variant="error">{error}</Alert></div>}
 
-        {/* Listings Grid */}
-        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <RefreshCw className="w-8 h-8 text-blue-600 animate-spin" />
-            </div>
-          ) : listings.length === 0 ? (
-            <div className="text-center py-16">
-              <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-xl font-medium text-slate-600 mb-2">
-                {searchQuery ? "No matching listings" : "No listings found"}
-              </h3>
-              <p className="text-slate-500">
-                {searchQuery
-                  ? "Try adjusting your search terms"
-                  : "Start scraping to see data here"}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {listings.map((listing) => (
-                    <div
-                      key={listing.id}
-                      className="bg-white/70 backdrop-blur-sm rounded-xl border border-slate-200/50 overflow-hidden hover:shadow-xl transition-all duration-300 group"
-                    >
-                      {/* Image */}
-                      <div className="relative h-48 bg-gradient-to-br from-slate-100 to-slate-200">
-                        {listing.image_url ? (
-                          <img
-                            src={listing.image_url}
-                            alt={listing.title}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full">
-                            <ImageIcon className="w-12 h-12 text-slate-400" />
-                          </div>
-                        )}
-                        <div className="absolute top-2 left-2">
-                          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">
-                            {listing.site}
-                          </span>
+      <Card padding={false}>
+        {loading ? (
+          <LoadingState />
+        ) : listings.length === 0 ? (
+          <EmptyState
+            icon={Search}
+            title={searchQuery ? "No matching listings" : "No listings found"}
+            description={searchQuery ? "Try adjusting your search terms" : "Start scraping to see data here"}
+          />
+        ) : (
+          <>
+            <div className="p-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {listings.map((listing) => (
+                  <div
+                    key={listing.id}
+                    className="border border-zinc-200 rounded-lg overflow-hidden bg-white hover:border-zinc-300 transition-colors"
+                  >
+                    <div className="relative h-44 bg-zinc-100">
+                      {listing.image_url ? (
+                        <img
+                          src={listing.image_url}
+                          alt={listing.title}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <ImageIcon className="w-8 h-8 text-zinc-300" />
                         </div>
-                      </div>
-
-                      {/* Content */}
-                      <div className="p-4">
-                        <h3 className="font-semibold text-slate-800 text-lg leading-tight mb-2">
-                          {highlightKeywordInTitle(listing.title, listing.keyword)}
-                        </h3>
-                        <div className="mb-3">
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
-                            {listing.keyword}
-                          </span>
-                        </div>
-                        {listing.description && (
-                          <p className="text-slate-600 text-sm mb-3 line-clamp-2">
-                            {listing.description}
-                          </p>
-                        )}
-
-                        {/* Meta Info */}
-                        <div className="space-y-2 mb-4">
-                          <div className="flex items-center justify-between text-xs text-slate-500">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {listing.created_at
-                                ? new Date(listing.created_at).toLocaleDateString()
-                                : "N/A"}
-                            </div>
-                            <span>ID: {listing.id}</span>
-                          </div>
-                          {listing.price !== null && (
-                            <div className="flex items-center gap-1 text-sm">
-                              <DollarSign className="w-4 h-4 text-green-600" />
-                              <span className="font-semibold text-green-700">
-                                ${listing.price.toFixed(2)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center gap-2 mt-2">
-                          <a
-                            href={listing.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex-1 flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 rounded-lg transition-all duration-200 font-medium text-sm"
-                          >
-                            <Eye className="w-4 h-4" />
-                            View Listing
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
-                          <button
-                            className="p-2 rounded-lg transition-colors relative group/unsave hover:bg-red-50 text-red-700"
-                            onClick={() => handleUnsaveListing(listing.id, listing.parent_id)}
-                            disabled={deletingId === listing.id}
-                            type="button"
-                            aria-label="Unsave listing"
-                          >
-                            {deletingId === listing.id ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                            <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/unsave:opacity-100 pointer-events-none transition-opacity">
-                              Unsave
-                            </span>
-                          </button>
-                          <button
-                            className="p-2 rounded-lg hover:bg-blue-50 transition-colors relative group/copy"
-                            onClick={async () => {
-                              await navigator.clipboard.writeText(listing.url);
-                              setCopiedId(listing.id);
-                              setTimeout(() => setCopiedId(null), 1200);
-                            }}
-                            aria-label="Copy URL"
-                            type="button"
-                          >
-                            {copiedId === listing.id ? (
-                              <Check className="w-4 h-4 text-green-600" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-slate-400 group-hover/copy:text-blue-600" />
-                            )}
-                            <span className="z-50 absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 text-xs rounded bg-slate-800 text-white opacity-0 group-hover/copy:opacity-100 pointer-events-none transition-opacity">
-                              Copy URL
-                            </span>
-                          </button>
-                        </div>
+                      )}
+                      <div className="absolute top-2 left-2">
+                        <Badge variant="info">{listing.site}</Badge>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
 
-              {/* Pagination */}
-              <div className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-slate-600">
-                      Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalCount)} of {totalCount} results
-                    </span>
-                    <select
-                      value={pageSize}
-                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                      className="px-3 py-1 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value={6}>6 per page</option>
-                      <option value={12}>12 per page</option>
-                      <option value={24}>24 per page</option>
-                      <option value={48}>48 per page</option>
-                      <option value={100}>100 per page</option>
-                      <option value={500}>500 per page</option>
-                      <option value={1000}>1000 per page</option>
-                    </select>
+                    <div className="p-3.5">
+                      <h3 className="text-sm font-medium text-zinc-900 leading-snug mb-2 line-clamp-2">
+                        {highlightKeywordInTitle(listing.title, listing.keyword)}
+                      </h3>
+                      <div className="mb-2">
+                        <Badge>{listing.keyword}</Badge>
+                      </div>
+                      {listing.description && (
+                        <p className="text-xs text-zinc-500 mb-3 line-clamp-2">
+                          {listing.description}
+                        </p>
+                      )}
+
+                      <div className="flex items-center justify-between text-xs text-zinc-400 mb-2">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {listing.created_at
+                            ? new Date(listing.created_at).toLocaleDateString()
+                            : "N/A"}
+                        </div>
+                        <span>#{listing.id}</span>
+                      </div>
+                      {listing.price !== null && (
+                        <div className="flex items-center gap-1 text-sm mb-3">
+                          <DollarSign className="w-3.5 h-3.5 text-zinc-400" />
+                          <span className="font-medium text-zinc-900">
+                            ${listing.price.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-1.5 pt-3 border-t border-zinc-100">
+                        <a
+                          href={listing.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 rounded-md transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          View
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        <button
+                          className="p-1.5 rounded-md border border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                          onClick={() => handleUnsaveListing(listing.id, listing.parent_id)}
+                          disabled={deletingId === listing.id}
+                          type="button"
+                          aria-label="Unsave listing"
+                          title="Unsave"
+                        >
+                          {deletingId === listing.id ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                        <button
+                          className="p-1.5 rounded-md border border-zinc-200 text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 transition-colors"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(listing.url);
+                            setCopiedId(listing.id);
+                            setTimeout(() => setCopiedId(null), 1200);
+                          }}
+                          aria-label="Copy URL"
+                          title="Copy URL"
+                          type="button"
+                        >
+                          {copiedId === listing.id ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                      className="p-2 rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-
-                    {getPageNumbers().map((page, index) => (
-                      <button
-                        key={index}
-                        onClick={() => typeof page === "number" && handlePageChange(page)}
-                        disabled={page === "..."}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${page === currentPage
-                          ? "bg-blue-600 text-white"
-                          : page === "..."
-                            ? "text-slate-400 cursor-default"
-                            : "hover:bg-white text-slate-600"
-                          }`}
-                      >
-                        {page}
-                      </button>
-                    ))}
-
-                    <button
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage === totalPages}
-                      className="p-2 rounded-lg hover:bg-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            </div>
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={totalCount}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </>
+        )}
+      </Card>
+    </PageLayout>
   );
 };
 
