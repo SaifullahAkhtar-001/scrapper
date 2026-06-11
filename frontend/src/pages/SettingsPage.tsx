@@ -105,7 +105,7 @@ const SettingsPage = () => {
 
             <div className="flex items-center justify-between py-3 border-t border-zinc-100">
               <div>
-                <div className="text-sm font-medium text-zinc-900">is_scraper_running</div>
+                <div className="text-sm font-medium text-zinc-900">Run Scraper</div>
                 <div className="text-xs text-zinc-500 mt-0.5">
                   {scraperRunning?.description ?? 'Scraper active flag'}
                 </div>
@@ -131,9 +131,9 @@ const SettingsPage = () => {
             </div>
 
             <div className="mt-2 text-xs text-zinc-400">
-              Current value:{' '}
+              Status:{' '}
               <code className="bg-zinc-100 px-1.5 py-0.5 rounded text-zinc-700">
-                {JSON.stringify(scraperRunning?.value ?? false)}
+                {scraperRunning?.value === true ? 'Running' : 'Paused'}
               </code>
             </div>
           </Card>

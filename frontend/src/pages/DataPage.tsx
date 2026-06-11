@@ -12,6 +12,7 @@ import {
   Save as SaveIcon,
   Trash2,
   ListFilter,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../components/SupabaseClient";
 import { PageLayout } from "../components/ui/PageLayout";
@@ -27,6 +28,9 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { Pagination } from "../components/ui/Pagination";
 
 type ViewMode = "pending" | "unqualified";
+
+const UNQUALIFIED_STORAGE_THRESHOLD = 5000;
+const PURGE_BATCH_SIZE = 500;
 
 export interface ScrapedListing {
   id: number;
@@ -69,6 +73,8 @@ const DataPage = () => {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [unqualifiedCount, setUnqualifiedCount] = useState(0);
+  const [purgingUnqualified, setPurgingUnqualified] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
@@ -93,8 +99,27 @@ const DataPage = () => {
     }
   };
 
+  const fetchUnqualifiedCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from("scraped_listings")
+        .select("id", { count: "exact", head: true })
+        .eq("ai_status", true)
+        .eq("saved", false);
+
+      if (error) {
+        console.error("Error fetching unqualified count:", error);
+      } else {
+        setUnqualifiedCount(count || 0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch unqualified count:", err);
+    }
+  };
+
   useEffect(() => {
     fetchSavedIds();
+    fetchUnqualifiedCount();
   }, []);
   const fetchSavedIds = async () => {
     try {
@@ -355,6 +380,57 @@ const DataPage = () => {
     }
   };
 
+  const handleDeleteAllUnqualified = async () => {
+    if (
+      !confirm(
+        `Delete all ${unqualifiedCount.toLocaleString()} unqualified listings? This cannot be undone and will free up database space.`
+      )
+    ) {
+      return;
+    }
+
+    setPurgingUnqualified(true);
+    setError(null);
+    try {
+      let deleted = 0;
+      while (true) {
+        const { data, error: selectError } = await supabase
+          .from("scraped_listings")
+          .select("id")
+          .eq("ai_status", true)
+          .eq("saved", false)
+          .limit(PURGE_BATCH_SIZE);
+
+        if (selectError) throw selectError;
+        if (!data || data.length === 0) break;
+
+        const ids = data.map((row) => row.id);
+        const { error: deleteError } = await supabase
+          .from("scraped_listings")
+          .delete()
+          .in("id", ids);
+
+        if (deleteError) throw deleteError;
+        deleted += ids.length;
+      }
+
+      setUnqualifiedCount(0);
+      if (viewMode === "unqualified") {
+        setListings([]);
+        setTotalCount(0);
+        setTotalPages(0);
+        setSelectedIds(new Set());
+      }
+      await fetchUnqualifiedCount();
+    } catch (e) {
+      console.error("Failed to purge unqualified listings:", e);
+      setError("Failed to delete unqualified listings");
+      await fetchUnqualifiedCount();
+    } finally {
+      setPurgingUnqualified(false);
+    }
+  };
+
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
     if (!confirm(`Delete ${selectedIds.size} unqualified listing(s)? This cannot be undone.`)) return;
@@ -372,6 +448,7 @@ const DataPage = () => {
       setListings((prev) => prev.filter((l) => !selectedIds.has(l.id)));
       setTotalCount((prev) => Math.max(0, prev - selectedIds.size));
       setSelectedIds(new Set());
+      await fetchUnqualifiedCount();
     } catch (e) {
       console.error("Failed to bulk delete listings:", e);
       setError("Failed to delete selected listings");
@@ -388,8 +465,8 @@ const DataPage = () => {
         title="Scraped Listings"
         description={
           isUnqualifiedView
-            ? "AI processed but not saved (ai_status=true, saved=false)"
-            : "Listings awaiting AI classification (ai_status is null)"
+            ? "AI processed but not saved"
+            : "Listings awaiting AI classification"
         }
         stat={{ value: totalCount, label: isUnqualifiedView ? "Unqualified" : "Pending" }}
         actions={
@@ -402,6 +479,35 @@ const DataPage = () => {
           </Button>
         }
       />
+
+      {!isUnqualifiedView && unqualifiedCount > UNQUALIFIED_STORAGE_THRESHOLD && (
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border border-red-200 bg-red-50 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-red-900">Storage warning</p>
+              <p className="text-sm text-red-800 mt-0.5">
+                {unqualifiedCount.toLocaleString()} unqualified listings are using database space.
+                Delete them to free up space.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="danger"
+            size="sm"
+            className="shrink-0"
+            onClick={handleDeleteAllUnqualified}
+            disabled={purgingUnqualified}
+          >
+            {purgingUnqualified ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            Delete all unqualified
+          </Button>
+        </div>
+      )}
 
       <Card className="mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
