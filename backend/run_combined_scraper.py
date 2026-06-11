@@ -6,8 +6,9 @@ This script provides an easy way to run both Craigslist and TodoColeccion scrape
 with different options and configurations.
 
 Usage:
-    python run_combined_scraper.py                    # Run full scraping
+    python run_combined_scraper.py                    # Run full scraping (if enabled in app_settings)
     python run_combined_scraper.py --quick           # Run quick test
+    python run_combined_scraper.py --force           # Run even when is_scraper_running is false
     python run_combined_scraper.py --help            # Show help
 """
 
@@ -18,6 +19,15 @@ from datetime import datetime
 
 # Add the services directory to the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from config.supabase_client import supabase_client
+
+
+def is_scraper_enabled() -> bool:
+    """Return True only when is_scraper_running is explicitly true in app_settings."""
+    value = supabase_client.get_app_setting('is_scraper_running', default=False)
+    return value is True
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -49,8 +59,19 @@ Examples:
         default='combined_scraper.log',
         help='Log file name (default: combined_scraper.log)'
     )
+
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Run even if is_scraper_running is false in app_settings'
+    )
     
     args = parser.parse_args()
+
+    if not args.force and not is_scraper_enabled():
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{timestamp}] Scraper disabled (is_scraper_running=false). Skipping.")
+        sys.exit(0)
     
     # Print header
     print("=" * 80)

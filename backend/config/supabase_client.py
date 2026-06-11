@@ -50,5 +50,22 @@ class SupabaseClient:
             print(f"Error checking URL: {e}")
             return False
 
+    def get_app_setting(self, key: str, default=None):
+        """Fetch a single app_settings value by key."""
+        try:
+            response = (
+                self.client.table('app_settings')
+                .select('value')
+                .eq('key', key)
+                .limit(1)
+                .execute()
+            )
+            if response.data:
+                return response.data[0]['value']
+            return default
+        except Exception as e:
+            print(f"Error fetching app setting '{key}': {e}")
+            return default
+
 # Create a global instance
 supabase_client = SupabaseClient() 
