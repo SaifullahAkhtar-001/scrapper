@@ -151,7 +151,7 @@ const SettingsPage = () => {
             </div>
           </Card>
 
-          <Card>
+          {/* <Card>
             <h2 className="text-sm font-semibold text-zinc-900 mb-1">Public API URL</h2>
             <p className="text-sm text-zinc-500 mb-4">
               Fetch <code className="text-xs bg-zinc-100 px-1 rounded">is_scraper_running</code> from any script or service using your Supabase anon key.
@@ -199,9 +199,9 @@ Authorization: Bearer ${supabaseAnonKey}`}
 ]`}
               </pre>
             </div>
-          </Card>
+          </Card> */}
 
-          {settings.length > 1 && (
+          {/* {settings.length > 1 && (
             <Card>
               <h2 className="text-sm font-semibold text-zinc-900 mb-4">All Settings</h2>
               <div className="divide-y divide-zinc-100">
@@ -220,7 +220,7 @@ Authorization: Bearer ${supabaseAnonKey}`}
                 ))}
               </div>
             </Card>
-          )}
+          )} */}
         </div>
       )}
     </PageLayout>
