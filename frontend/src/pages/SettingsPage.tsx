@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Copy, Check, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { supabase } from '../components/SupabaseClient';
 import { PageLayout } from '../components/ui/PageLayout';
 import { PageHeader } from '../components/ui/PageHeader';
@@ -16,19 +16,12 @@ interface AppSetting {
   updated_at: string;
 }
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
 const SettingsPage = () => {
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const fetchUrl =
-    `${supabaseUrl}/rest/v1/app_settings?key=eq.is_scraper_running&select=key,value,updated_at`;
 
   const fetchSettings = async () => {
     setLoading(true);
@@ -80,12 +73,6 @@ const SettingsPage = () => {
       setError(`Failed to update ${key}`);
     }
     setSaving(null);
-  };
-
-  const copyFetchUrl = async () => {
-    await navigator.clipboard.writeText(fetchUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const scraperRunning = settings.find((s) => s.key === 'is_scraper_running');

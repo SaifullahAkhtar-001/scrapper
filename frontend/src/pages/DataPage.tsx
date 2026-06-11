@@ -11,6 +11,7 @@ import {
   Check,
   Save as SaveIcon,
   Trash2,
+  ListFilter,
 } from "lucide-react";
 import { supabase } from "../components/SupabaseClient";
 import { PageLayout } from "../components/ui/PageLayout";
@@ -18,11 +19,14 @@ import { PageHeader } from "../components/ui/PageHeader";
 import { Card } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Select } from "../components/ui/Select";
+import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { Alert } from "../components/ui/Alert";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { Pagination } from "../components/ui/Pagination";
+
+type ViewMode = "pending" | "unqualified";
 
 export interface ScrapedListing {
   id: number;
@@ -35,6 +39,8 @@ export interface ScrapedListing {
   keyword: string;
   created_at: string | null;
   updated_at: string | null;
+  ai_status: boolean | null;
+  saved: boolean | null;
 }
 
 export interface Keyword {
@@ -47,6 +53,7 @@ export interface Keyword {
 }
 
 const DataPage = () => {
+  const [viewMode, setViewMode] = useState<ViewMode>("pending");
   const [listings, setListings] = useState<ScrapedListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +67,8 @@ const DataPage = () => {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(48);
@@ -148,6 +157,13 @@ const DataPage = () => {
         query = query.lte("price", parseFloat(priceRange.max));
       }
 
+      if (viewMode === "pending") {
+        query = query.is("ai_status", null);
+      } else {
+        // AI processed but rejected: ai_status=true means classified, saved=false means not qualified
+        query = query.eq("ai_status", true).eq("saved", false);
+      }
+
       if (sortBy === "oldest") {
         query = query.order("id", { ascending: true });
       } else if (sortBy === "price-high") {
@@ -192,15 +208,6 @@ const DataPage = () => {
   }, []);
 
   useEffect(() => {
-    console.log("useEffect triggered with dependencies:", {
-      currentPage,
-      pageSize,
-      searchQuery,
-      selectedSite,
-      selectedKeyword,
-      priceRange,
-      sortBy,
-    });
     fetchListings();
   }, [
     currentPage,
@@ -210,11 +217,13 @@ const DataPage = () => {
     selectedKeyword,
     priceRange,
     sortBy,
+    viewMode,
   ]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedSite, selectedKeyword, priceRange, sortBy]);
+    setSelectedIds(new Set());
+  }, [searchQuery, selectedSite, selectedKeyword, priceRange, sortBy, viewMode]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -301,6 +310,11 @@ const DataPage = () => {
       if (error) throw error;
       setListings((prev) => prev.filter((l) => l.id !== id));
       setTotalCount((prev) => Math.max(0, prev - 1));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     } catch (e) {
       console.error("Failed to delete listing:", e);
       setError("Failed to delete listing");
@@ -309,12 +323,84 @@ const DataPage = () => {
     }
   };
 
+  const toggleViewMode = () => {
+    setViewMode((mode) => (mode === "pending" ? "unqualified" : "pending"));
+  };
+
+  const toggleSelectId = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allOnPageSelected =
+    listings.length > 0 && listings.every((l) => selectedIds.has(l.id));
+
+  const toggleSelectAllOnPage = () => {
+    if (allOnPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        listings.forEach((l) => next.delete(l.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        listings.forEach((l) => next.add(l.id));
+        return next;
+      });
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!confirm(`Delete ${selectedIds.size} unqualified listing(s)? This cannot be undone.`)) return;
+
+    setBulkDeleting(true);
+    setError(null);
+    try {
+      const ids = Array.from(selectedIds);
+      const { error } = await supabase
+        .from("scraped_listings")
+        .delete()
+        .in("id", ids);
+      if (error) throw error;
+
+      setListings((prev) => prev.filter((l) => !selectedIds.has(l.id)));
+      setTotalCount((prev) => Math.max(0, prev - selectedIds.size));
+      setSelectedIds(new Set());
+    } catch (e) {
+      console.error("Failed to bulk delete listings:", e);
+      setError("Failed to delete selected listings");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  const isUnqualifiedView = viewMode === "unqualified";
+
   return (
     <PageLayout wide>
       <PageHeader
         title="Scraped Listings"
-        description="Browse and manage scraped data"
-        stat={{ value: totalCount, label: "Total" }}
+        description={
+          isUnqualifiedView
+            ? "AI processed but not saved (ai_status=true, saved=false)"
+            : "Listings awaiting AI classification (ai_status is null)"
+        }
+        stat={{ value: totalCount, label: isUnqualifiedView ? "Unqualified" : "Pending" }}
+        actions={
+          <Button
+            variant={isUnqualifiedView ? "primary" : "secondary"}
+            onClick={toggleViewMode}
+          >
+            <ListFilter className="w-4 h-4" />
+            {isUnqualifiedView ? "Show Pending Data" : "Show Unqualified Data"}
+          </Button>
+        }
       />
 
       <Card className="mb-6">
@@ -371,19 +457,72 @@ const DataPage = () => {
         ) : listings.length === 0 ? (
           <EmptyState
             icon={Search}
-            title={searchQuery ? "No matching listings" : "No listings found"}
-            description={searchQuery ? "Try adjusting your search terms" : "Start scraping to see data here"}
+            title={searchQuery ? "No matching listings" : isUnqualifiedView ? "No unqualified listings" : "No pending listings"}
+            description={
+              searchQuery
+                ? "Try adjusting your search terms"
+                : isUnqualifiedView
+                  ? "All unqualified listings have been removed"
+                  : "New scraped listings will appear here before AI classification"
+            }
           />
         ) : (
           <>
+            {isUnqualifiedView && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 border-b border-zinc-200 bg-zinc-50">
+                <label className="flex items-center gap-2.5 text-sm text-zinc-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAllOnPage}
+                    className="w-4 h-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  />
+                  Select all on page ({listings.length})
+                  {selectedIds.size > 0 && (
+                    <span className="text-zinc-500">
+                      · {selectedIds.size} selected
+                    </span>
+                  )}
+                </label>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  disabled={selectedIds.size === 0 || bulkDeleting}
+                >
+                  {bulkDeleting ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Delete selected ({selectedIds.size})
+                </Button>
+              </div>
+            )}
+
             <div className="p-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {listings.map((listing) => (
                   <div
                     key={listing.id}
-                    className="border border-zinc-200 rounded-lg overflow-hidden bg-white hover:border-zinc-300 transition-colors group"
+                    className={`border rounded-lg overflow-hidden bg-white transition-colors group ${
+                      isUnqualifiedView && selectedIds.has(listing.id)
+                        ? "border-zinc-900 ring-1 ring-zinc-900"
+                        : "border-zinc-200 hover:border-zinc-300"
+                    }`}
                   >
                     <div className="relative h-44 bg-zinc-100">
+                      {isUnqualifiedView && (
+                        <div className="absolute top-2 right-2 z-10">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(listing.id)}
+                            onChange={() => toggleSelectId(listing.id)}
+                            className="w-4 h-4 rounded border-zinc-300 bg-white text-zinc-900 focus:ring-zinc-900 shadow-sm"
+                            aria-label={`Select listing ${listing.id}`}
+                          />
+                        </div>
+                      )}
                       {listing.image_url ? (
                         <img
                           src={listing.image_url}
